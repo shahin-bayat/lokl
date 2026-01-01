@@ -1,4 +1,4 @@
-module github.com/shahin-bayat/devenv
+module github.com/shahin-bayat/lokl
 
 go 1.25.5
 

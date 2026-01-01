@@ -1,12 +1,12 @@
 .PHONY: build test lint clean install run fmt check
 
-BINARY=devenv
+BINARY=lokl
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS=-ldflags "-X github.com/shahin-bayat/devenv/internal/version.Version=$(VERSION)"
-LOCAL_PREFIX=github.com/shahin-bayat/devenv
+LDFLAGS=-ldflags "-X github.com/shahin-bayat/lokl/internal/version.Version=$(VERSION)"
+LOCAL_PREFIX=github.com/shahin-bayat/lokl
 
 build:
-	go build $(LDFLAGS) -o $(BINARY) ./cmd/devenv
+	go build $(LDFLAGS) -o $(BINARY) ./cmd/lokl
 
 test:
 	go test -race -v ./...
@@ -23,9 +23,9 @@ clean:
 	rm -rf dist/
 
 install:
-	go install $(LDFLAGS) ./cmd/devenv
+	go install $(LDFLAGS) ./cmd/lokl
 
 run:
-	go run ./cmd/devenv $(ARGS)
+	go run ./cmd/lokl $(ARGS)
 
 check: fmt build test lint

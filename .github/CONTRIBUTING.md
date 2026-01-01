@@ -1,10 +1,10 @@
-# Contributing to DevEnv
+# Contributing to lokl
 
 ## Getting Started
 
 ```bash
-git clone https://github.com/shahin-bayat/devenv.git
-cd devenv
+git clone https://github.com/shahin-bayat/lokl.git
+cd lokl
 make build
 make test
 ```

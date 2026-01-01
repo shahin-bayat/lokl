@@ -25,4 +25,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/shahin-bayat/devenv
+        - github.com/shahin-bayat/lokl

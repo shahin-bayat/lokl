@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shahin-bayat/devenv/internal/version"
+	"github.com/shahin-bayat/lokl/internal/version"
 )
 
 func main() {
@@ -16,9 +16,9 @@ func main() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:     "devenv",
-	Short:   "Development environment orchestrator",
-	Long:    "DevEnv - Define and run your local development environment with a single command.",
+	Use:     "lokl",
+	Short:   "Local development environment orchestrator",
+	Long:    "lokl - Define and run your local development environment with a single command.",
 	Version: version.Version,
 }
 
@@ -26,7 +26,7 @@ var upCmd = &cobra.Command{
 	Use:   "up [services...]",
 	Short: "Start the development environment",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("devenv up - not implemented")
+		fmt.Println("lokl up - not implemented")
 		return nil
 	},
 }
@@ -35,7 +35,7 @@ var downCmd = &cobra.Command{
 	Use:   "down [services...]",
 	Short: "Stop the development environment",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("devenv down - not implemented")
+		fmt.Println("lokl down - not implemented")
 		return nil
 	},
 }
@@ -45,7 +45,7 @@ var statusCmd = &cobra.Command{
 	Aliases: []string{"ps"},
 	Short:   "Show status of services",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("devenv status - not implemented")
+		fmt.Println("lokl status - not implemented")
 		return nil
 	},
 }

@@ -1,14 +1,14 @@
 version: 2
 
-project_name: devenv
+project_name: lokl
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - main: ./cmd/devenv
-    binary: devenv
+  - main: ./cmd/lokl
+    binary: lokl
     env:
       - CGO_ENABLED=0
     goos:
@@ -20,7 +20,7 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/shahin-bayat/devenv/internal/version.Version={{.Version}}
+      - -X github.com/shahin-bayat/lokl/internal/version.Version={{.Version}}
 
 archives:
   - format: tar.gz

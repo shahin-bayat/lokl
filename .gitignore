@@ -1,12 +1,12 @@
 # Binary
-/devenv
-/devenv.exe
+/lokl
+/lokl.exe
 
 # Build output
 /dist/
 
 # Runtime data
-.devenv/
+.lokl/
 
 # Claude Code
 .claude/
