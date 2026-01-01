@@ -12,7 +12,7 @@ test:
 	go test -race -v ./...
 
 lint:
-	golangci-lint run
+	go vet ./...
 
 fmt:
 	goimports -w -local $(LOCAL_PREFIX) .
@@ -28,7 +28,4 @@ install:
 run:
 	go run ./cmd/devenv $(ARGS)
 
-check: fmt
-	go build ./...
-	go test -race ./...
-	golangci-lint run
+check: fmt build test lint
