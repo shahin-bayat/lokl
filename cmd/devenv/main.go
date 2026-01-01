@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/shahin-bayat/devenv/internal/version"
 	"github.com/spf13/cobra"
+
+	"github.com/shahin-bayat/devenv/internal/version"
 )
 
 func main() {
