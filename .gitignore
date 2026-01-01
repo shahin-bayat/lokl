@@ -1,0 +1,32 @@
+# Binary
+/devenv
+/devenv.exe
+
+# Build output
+/dist/
+
+# Runtime data
+.devenv/
+
+# Claude Code
+.claude/
+CLAUDE.md
+CONCEPT.md
+
+# Test coverage
+coverage.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+__debug_bin*
