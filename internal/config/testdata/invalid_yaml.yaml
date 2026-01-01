@@ -1,0 +1,5 @@
+name: bad
+services:
+  app:
+    command: ./run.sh
+    port: not_a_number

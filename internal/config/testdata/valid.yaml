@@ -1,0 +1,21 @@
+name: test-project
+version: "1"
+
+domains:
+  zone: test.dev
+  https: true
+
+env:
+  NODE_ENV: development
+
+services:
+  api:
+    command: npm run dev
+    port: 3000
+    domain: api
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    port: 5432

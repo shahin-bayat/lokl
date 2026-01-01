@@ -1,0 +1,4 @@
+name: minimal
+services:
+  app:
+    command: ./run.sh
