@@ -1,5 +1,12 @@
 package config
 
+const (
+	DefaultRestartPolicy  = "on-failure"
+	DefaultHealthInterval = "10s"
+	DefaultHealthTimeout  = "3s"
+	DefaultHealthRetries  = 3
+)
+
 func ApplyDefaults(cfg *Config) {
 	if cfg.Proxy.HTTPS == nil {
 		t := true
@@ -13,7 +20,7 @@ func ApplyDefaults(cfg *Config) {
 		}
 
 		if svc.Restart == "" {
-			svc.Restart = "on-failure"
+			svc.Restart = DefaultRestartPolicy
 		}
 
 		if svc.Health != nil {
@@ -26,13 +33,13 @@ func ApplyDefaults(cfg *Config) {
 
 func applyHealthDefaults(h *HealthConfig) {
 	if h.Interval == "" {
-		h.Interval = "10s"
+		h.Interval = DefaultHealthInterval
 	}
 	if h.Timeout == "" {
-		h.Timeout = "3s"
+		h.Timeout = DefaultHealthTimeout
 	}
 	if h.Retries == nil {
-		r := 3
+		r := DefaultHealthRetries
 		h.Retries = &r
 	}
 }
