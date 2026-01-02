@@ -45,8 +45,8 @@ func TestLoadValidConfig(t *testing.T) {
 	if cfg.Name != "test-project" {
 		t.Errorf("name = %q, want %q", cfg.Name, "test-project")
 	}
-	if cfg.Domains.Zone != "test.dev" {
-		t.Errorf("domains.zone = %q, want %q", cfg.Domains.Zone, "test.dev")
+	if cfg.Proxy.Domain != "test.dev" {
+		t.Errorf("proxy.domain = %q, want %q", cfg.Proxy.Domain, "test.dev")
 	}
 	if len(cfg.Services) != 2 {
 		t.Errorf("services count = %d, want 2", len(cfg.Services))
@@ -91,12 +91,12 @@ func TestValidate(t *testing.T) {
 			wantErr: "cannot specify both command and image",
 		},
 		{
-			name: "domain without port",
+			name: "subdomain without port",
 			cfg: Config{
 				Name:     "test",
-				Services: map[string]Service{"a": {Command: "x", Domain: "app"}},
+				Services: map[string]Service{"a": {Command: "x", Subdomain: "app"}},
 			},
-			wantErr: "port is required when domain is set",
+			wantErr: "port is required when subdomain is set",
 		},
 		{
 			name: "unknown dependency",
@@ -170,8 +170,8 @@ func TestApplyDefaults(t *testing.T) {
 
 	ApplyDefaults(cfg)
 
-	if cfg.Domains.HTTPS == nil || !*cfg.Domains.HTTPS {
-		t.Error("domains.https should default to true")
+	if cfg.Proxy.HTTPS == nil || !*cfg.Proxy.HTTPS {
+		t.Error("proxy.https should default to true")
 	}
 
 	svcA := cfg.Services["a"]

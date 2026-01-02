@@ -1,8 +1,8 @@
 name: test-project
 version: "1"
 
-domains:
-  zone: test.dev
+proxy:
+  domain: test.dev
   https: true
 
 env:
@@ -12,7 +12,7 @@ services:
   api:
     command: npm run dev
     port: 3000
-    domain: api
+    subdomain: api
     depends_on:
       - db
 

@@ -1,9 +1,9 @@
 package config
 
 func ApplyDefaults(cfg *Config) {
-	if cfg.Domains.HTTPS == nil {
+	if cfg.Proxy.HTTPS == nil {
 		t := true
-		cfg.Domains.HTTPS = &t
+		cfg.Proxy.HTTPS = &t
 	}
 
 	for name, svc := range cfg.Services {
