@@ -89,7 +89,7 @@ func TestSortByDependency(t *testing.T) {
 func TestLineBuffer(t *testing.T) {
 	t.Run("basic write and read", func(t *testing.T) {
 		buf := newLineBuffer(10)
-		buf.Write([]byte("line1\nline2\nline3\n"))
+		_, _ = buf.Write([]byte("line1\nline2\nline3\n"))
 
 		lines := buf.Lines()
 		if len(lines) != 3 {
@@ -102,7 +102,7 @@ func TestLineBuffer(t *testing.T) {
 
 	t.Run("exceeds max lines", func(t *testing.T) {
 		buf := newLineBuffer(3)
-		buf.Write([]byte("a\nb\nc\nd\ne\n"))
+		_, _ = buf.Write([]byte("a\nb\nc\nd\ne\n"))
 
 		lines := buf.Lines()
 		if len(lines) != 3 {
@@ -115,8 +115,8 @@ func TestLineBuffer(t *testing.T) {
 
 	t.Run("partial line", func(t *testing.T) {
 		buf := newLineBuffer(10)
-		buf.Write([]byte("complete\npartial"))
-		buf.Write([]byte(" continued\n"))
+		_, _ = buf.Write([]byte("complete\npartial"))
+		_, _ = buf.Write([]byte(" continued\n"))
 
 		lines := buf.Lines()
 		if len(lines) != 2 {

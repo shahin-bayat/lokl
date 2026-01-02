@@ -67,7 +67,7 @@ func (p *Process) Start() error {
 
 	// Watch for unexpected exit - if process dies while still "running", mark as failed
 	go func() {
-		p.cmd.Wait()
+		_ = p.cmd.Wait()
 		p.mu.Lock()
 		if p.State == StateRunning {
 			p.State = StateFailed
@@ -95,12 +95,12 @@ func (p *Process) Stop() error {
 	}
 	p.mu.Unlock()
 
-	cmd.Process.Signal(syscall.SIGTERM)
+	_ = cmd.Process.Signal(syscall.SIGTERM)
 
 	time.AfterFunc(stopTimeout, func() {
-		cmd.Process.Kill()
+		_ = cmd.Process.Kill()
 	})
-	cmd.Wait()
+	_ = cmd.Wait()
 
 	p.mu.Lock()
 	p.State = StateStopped
