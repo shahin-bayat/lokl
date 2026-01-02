@@ -13,13 +13,16 @@ import (
 
 const stopTimeout = 10 * time.Second
 
+const maxLogLines = 1000
+
 type Service struct {
 	Name   string
 	Config config.Service
 	State  State
 
-	cmd *exec.Cmd
-	mu  sync.Mutex
+	cmd  *exec.Cmd
+	logs *lineBuffer
+	mu   sync.Mutex
 }
 
 func New(name string, cfg config.Service) *Service {
@@ -47,6 +50,10 @@ func (s *Service) Start() error {
 	}
 
 	s.cmd.Env = s.buildEnv()
+
+	s.logs = newLineBuffer(maxLogLines)
+	s.cmd.Stdout = s.logs
+	s.cmd.Stderr = s.logs
 
 	if err := s.cmd.Start(); err != nil {
 		s.State = StateFailed
@@ -98,4 +105,11 @@ func (s *Service) buildEnv() []string {
 		env = append(env, k+"="+v)
 	}
 	return env
+}
+
+func (s *Service) Logs() []string {
+	if s.logs == nil {
+		return nil
+	}
+	return s.logs.Lines()
 }
