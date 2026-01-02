@@ -1,6 +1,7 @@
 package process
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,13 +17,15 @@ const stopTimeout = 10 * time.Second
 const maxLogLines = 1000
 
 type Service struct {
-	Name   string
-	Config config.Service
-	State  State
+	Name    string
+	Config  config.Service
+	State   State
+	Healthy bool
 
-	cmd  *exec.Cmd
-	logs *lineBuffer
-	mu   sync.Mutex
+	cmd          *exec.Cmd
+	logs         *lineBuffer
+	healthCancel context.CancelFunc
+	mu           sync.Mutex
 }
 
 func New(name string, cfg config.Service) *Service {
@@ -72,6 +75,10 @@ func (s *Service) Start() error {
 		s.mu.Unlock()
 	}()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	s.healthCancel = cancel
+	go s.startHealthCheck(ctx)
+
 	return nil
 }
 
@@ -83,6 +90,9 @@ func (s *Service) Stop() error {
 	}
 	s.State = StateStopping
 	cmd := s.cmd
+	if s.healthCancel != nil {
+		s.healthCancel()
+	}
 	s.mu.Unlock()
 
 	cmd.Process.Signal(syscall.SIGTERM)
