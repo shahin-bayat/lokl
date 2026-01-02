@@ -12,6 +12,7 @@
 .claude/
 CLAUDE.md
 CONCEPT.md
+docs/learning/
 
 # Test coverage
 coverage.out

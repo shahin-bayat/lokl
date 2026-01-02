@@ -7,15 +7,15 @@ import (
 	"time"
 )
 
-func (s *Service) startHealthCheck(ctx context.Context) {
-	if s.Config.Health == nil || s.Config.Health.Path == "" {
-		s.Healthy = true
+func (p *Process) startHealthCheck(ctx context.Context) {
+	if p.Config.Health == nil || p.Config.Health.Path == "" {
+		p.Healthy = true
 		return
 	}
 
-	interval, _ := time.ParseDuration(s.Config.Health.Interval)
-	timeout, _ := time.ParseDuration(s.Config.Health.Timeout)
-	retries := *s.Config.Health.Retries
+	interval, _ := time.ParseDuration(p.Config.Health.Interval)
+	timeout, _ := time.ParseDuration(p.Config.Health.Timeout)
+	retries := *p.Config.Health.Retries
 
 	failures := 0
 	ticker := time.NewTicker(interval)
@@ -28,25 +28,25 @@ func (s *Service) startHealthCheck(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if s.checkHealth(timeout) {
+			if p.checkHealth(timeout) {
 				failures = 0
-				s.mu.Lock()
-				s.Healthy = true
-				s.mu.Unlock()
+				p.mu.Lock()
+				p.Healthy = true
+				p.mu.Unlock()
 			} else {
 				failures++
 				if failures >= retries {
-					s.mu.Lock()
-					s.Healthy = false
-					s.mu.Unlock()
+					p.mu.Lock()
+					p.Healthy = false
+					p.mu.Unlock()
 				}
 			}
 		}
 	}
 }
 
-func (s *Service) checkHealth(timeout time.Duration) bool {
-	url := fmt.Sprintf("http://localhost:%d%s", s.Config.Port, s.Config.Health.Path)
+func (p *Process) checkHealth(timeout time.Duration) bool {
+	url := fmt.Sprintf("http://localhost:%d%s", p.Config.Port, p.Config.Health.Path)
 
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)
