@@ -12,9 +12,10 @@ import (
 	"github.com/shahin-bayat/lokl/internal/config"
 )
 
-const stopTimeout = 10 * time.Second
-
-const maxLogLines = 1000
+const (
+	stopTimeout = 10 * time.Second
+	maxLogLines = 1000
+)
 
 type Process struct {
 	Name    string
@@ -22,10 +23,10 @@ type Process struct {
 	State   State
 	Healthy bool
 
-	cmd          *exec.Cmd
-	logs         *lineBuffer
-	healthCancel context.CancelFunc
-	mu           sync.Mutex
+	cmd    *exec.Cmd
+	logs   *lineBuffer
+	cancel context.CancelFunc
+	mu     sync.Mutex
 }
 
 func New(name string, cfg config.Service) *Process {
@@ -76,7 +77,7 @@ func (p *Process) Start() error {
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	p.healthCancel = cancel
+	p.cancel = cancel
 	go p.startHealthCheck(ctx)
 
 	return nil
@@ -90,8 +91,8 @@ func (p *Process) Stop() error {
 	}
 	p.State = StateStopping
 	cmd := p.cmd
-	if p.healthCancel != nil {
-		p.healthCancel()
+	if p.cancel != nil {
+		p.cancel()
 	}
 	p.mu.Unlock()
 
