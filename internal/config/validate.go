@@ -58,9 +58,9 @@ func validateService(name string, svc *Service, services map[string]Service) err
 
 	if svc.Restart != "" {
 		switch svc.Restart {
-		case "always", "on-failure", "never":
+		case RestartAlways, RestartOnFailure, RestartNever:
 		default:
-			return fmt.Errorf("service %q: invalid restart policy %q (must be always, on-failure, or never)", name, svc.Restart)
+			return fmt.Errorf("service %q: invalid restart policy %q (must be %s, %s, or %s)", name, svc.Restart, RestartAlways, RestartOnFailure, RestartNever)
 		}
 	}
 

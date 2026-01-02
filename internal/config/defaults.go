@@ -1,7 +1,11 @@
 package config
 
 const (
-	DefaultRestartPolicy  = "on-failure"
+	RestartAlways    = "always"
+	RestartOnFailure = "on-failure"
+	RestartNever     = "never"
+
+	DefaultRestartPolicy  = RestartOnFailure
 	DefaultHealthInterval = "10s"
 	DefaultHealthTimeout  = "3s"
 	DefaultHealthRetries  = 3
