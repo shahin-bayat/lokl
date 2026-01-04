@@ -15,6 +15,12 @@ func Validate(cfg *Config) error {
 	}
 
 	for name, svc := range cfg.Services {
+		if svc.Subdomain != "" && cfg.Proxy.Domain == "" {
+			return fmt.Errorf("service %q has subdomain but proxy.domain is not configured", name)
+		}
+	}
+
+	for name, svc := range cfg.Services {
 		if err := validateService(name, &svc, cfg.Services); err != nil {
 			return err
 		}

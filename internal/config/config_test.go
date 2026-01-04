@@ -91,9 +91,18 @@ func TestValidate(t *testing.T) {
 			wantErr: "cannot specify both command and image",
 		},
 		{
+			name: "subdomain without proxy domain",
+			cfg: Config{
+				Name:     "test",
+				Services: map[string]Service{"a": {Command: "x", Subdomain: "app", Port: 3000}},
+			},
+			wantErr: "has subdomain but proxy.domain is not configured",
+		},
+		{
 			name: "subdomain without port",
 			cfg: Config{
 				Name:     "test",
+				Proxy:    ProxyConfig{Domain: "test.dev"},
 				Services: map[string]Service{"a": {Command: "x", Subdomain: "app"}},
 			},
 			wantErr: "port is required when subdomain is set",
