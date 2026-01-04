@@ -1,3 +1,4 @@
+// Package process manages service process lifecycle.
 package process
 
 import (
