@@ -65,7 +65,7 @@ func (h *HostsManager) NeedsSudo() bool {
 	if err != nil {
 		return true
 	}
-	f.Close()
+	_ = f.Close()
 	return false
 }
 
