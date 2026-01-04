@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/shahin-bayat/lokl/internal/config"
@@ -73,7 +74,7 @@ func (s *Supervisor) Stop() error {
 		}
 	}
 
-	if err := s.proxy.Stop(true); err != nil {
+	if err := s.proxy.Stop(false); err != nil {
 		return fmt.Errorf("stopping proxy: %w", err)
 	}
 
@@ -94,17 +95,22 @@ func (s *Supervisor) setupProxy() error {
 
 	fmt.Println("  Setting up proxy...")
 
-	if s.proxy.NeedsSudo() {
-		fmt.Println("  ⚠ DNS configuration requires sudo")
-	}
-
 	if err := s.proxy.Setup(); err != nil {
 		return fmt.Errorf("proxy setup: %w", err)
 	}
-
 	fmt.Printf("  ✓ Certificates ready in %s\n", s.proxy.CertDir())
-	fmt.Printf("  ✓ DNS configured for %d domains\n", len(s.proxy.Domains()))
 
+	unresolved := s.proxy.UnresolvedDomains()
+	if len(unresolved) > 0 {
+		fmt.Printf("\n  ⚠ DNS entries needed for: %s\n", strings.Join(unresolved, ", "))
+		fmt.Println("\n  Option 1 - Run:")
+		fmt.Println("    sudo lokl dns setup")
+		fmt.Println("\n  Option 2 - Add manually to /etc/hosts:")
+		fmt.Printf("    %s\n", strings.ReplaceAll(s.proxy.DNSBlock(), "\n", "\n    "))
+		return fmt.Errorf("DNS not configured")
+	}
+
+	fmt.Printf("  ✓ DNS configured for %d domains\n", len(s.proxy.Domains()))
 	return nil
 }
 
@@ -114,7 +120,7 @@ func (s *Supervisor) startProxy() error {
 	}
 
 	go func() {
-		if err := s.proxy.Start(); err != nil {
+		if err := s.proxy.Start(); err != nil && err.Error() != "http: Server closed" {
 			fmt.Fprintf(os.Stderr, "  ✗ Proxy error: %v\n", err)
 		}
 	}()

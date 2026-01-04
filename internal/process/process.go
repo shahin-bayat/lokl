@@ -48,7 +48,9 @@ func (p *Process) Start() error {
 
 	p.State = StateStarting
 
-	p.cmd = exec.Command("sh", "-c", p.Config.Command)
+	// Use exec to replace shell process, making signal handling cleaner
+	p.cmd = exec.Command("sh", "-c", "exec "+p.Config.Command)
+	p.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if p.Config.Path != "" {
 		p.cmd.Dir = p.Config.Path
@@ -97,10 +99,12 @@ func (p *Process) Stop() error {
 	}
 	p.mu.Unlock()
 
-	_ = cmd.Process.Signal(syscall.SIGTERM)
+	// Send SIGTERM to entire process group (negative PID)
+	pgid := cmd.Process.Pid
+	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 
 	time.AfterFunc(stopTimeout, func() {
-		_ = cmd.Process.Kill()
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 	})
 	_ = cmd.Wait()
 
