@@ -1,3 +1,4 @@
+// Package config handles loading and validating lokl configuration files.
 package config
 
 import (
@@ -10,14 +11,14 @@ import (
 type Config struct {
 	Name     string             `yaml:"name"`
 	Version  string             `yaml:"version"`
-	Domains  DomainsConfig      `yaml:"domains"`
+	Proxy    ProxyConfig        `yaml:"proxy"`
 	Env      map[string]string  `yaml:"env"`
 	Services map[string]Service `yaml:"services"`
 }
 
-type DomainsConfig struct {
-	Zone  string `yaml:"zone"`
-	HTTPS *bool  `yaml:"https"`
+type ProxyConfig struct {
+	Domain string `yaml:"domain"`
+	HTTPS  *bool  `yaml:"https"`
 }
 
 type Service struct {
@@ -25,10 +26,10 @@ type Service struct {
 	Image   string `yaml:"image"`
 	Path    string `yaml:"path"`
 
-	Port   int    `yaml:"port"`
-	Domain string `yaml:"domain"`
+	Port      int    `yaml:"port"`
+	Subdomain string `yaml:"subdomain"`
 
-	SPA *SPAConfig `yaml:"spa"`
+	Rewrite *RewriteConfig `yaml:"rewrite"`
 
 	Env map[string]string `yaml:"env"`
 
@@ -46,9 +47,9 @@ type Service struct {
 	Limits *LimitsConfig `yaml:"limits"`
 }
 
-type SPAConfig struct {
-	Root     string `yaml:"root"`
-	Fallback string `yaml:"fallback"`
+type RewriteConfig struct {
+	StripPrefix string `yaml:"strip_prefix"`
+	Fallback    string `yaml:"fallback"`
 }
 
 type HealthConfig struct {

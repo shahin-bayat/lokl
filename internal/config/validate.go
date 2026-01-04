@@ -15,6 +15,12 @@ func Validate(cfg *Config) error {
 	}
 
 	for name, svc := range cfg.Services {
+		if svc.Subdomain != "" && cfg.Proxy.Domain == "" {
+			return fmt.Errorf("service %q has subdomain but proxy.domain is not configured", name)
+		}
+	}
+
+	for name, svc := range cfg.Services {
 		if err := validateService(name, &svc, cfg.Services); err != nil {
 			return err
 		}
@@ -34,8 +40,8 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		return fmt.Errorf("service %q: cannot specify both command and image", name)
 	}
 
-	if svc.Domain != "" && svc.Port == 0 {
-		return fmt.Errorf("service %q: port is required when domain is set", name)
+	if svc.Subdomain != "" && svc.Port == 0 {
+		return fmt.Errorf("service %q: port is required when subdomain is set", name)
 	}
 
 	for _, dep := range svc.DependsOn {
@@ -58,9 +64,9 @@ func validateService(name string, svc *Service, services map[string]Service) err
 
 	if svc.Restart != "" {
 		switch svc.Restart {
-		case "always", "on-failure", "never":
+		case RestartAlways, RestartOnFailure, RestartNever:
 		default:
-			return fmt.Errorf("service %q: invalid restart policy %q (must be always, on-failure, or never)", name, svc.Restart)
+			return fmt.Errorf("service %q: invalid restart policy %q (must be %s, %s, or %s)", name, svc.Restart, RestartAlways, RestartOnFailure, RestartNever)
 		}
 	}
 

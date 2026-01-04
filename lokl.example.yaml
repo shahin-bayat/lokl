@@ -4,9 +4,9 @@
 name: waipu                    # Project identifier (required)
 version: "1"                   # Config version for future compatibility
 
-# Domain configuration for HTTPS routing
-domains:
-  zone: waipu-dev.net          # Base domain - services get subdomains like app.waipu-dev.net
+# Proxy configuration for HTTPS routing
+proxy:
+  domain: waipu-dev.net        # Base domain - services get subdomains like app.waipu-dev.net
   https: true                  # Enable HTTPS with auto-generated certificates (default: true)
 
 # Global environment variables available to all services
@@ -20,10 +20,11 @@ services:
     path: ./apps/customer-funnel    # Working directory relative to lokl.yaml
     command: pnpm dev               # Command to start the service
     port: 8080                      # Port the service listens on
-    domain: client                  # Creates https://client.waipu-dev.net
-    spa:
-      root: customer-funnel         # Strip /customer-funnel prefix from paths (for monorepo builds)
-      fallback: /index.html         # Return this for non-asset paths (client-side routing)
+    subdomain: client               # Creates https://client.waipu-dev.net
+    # Optional: Path rewriting (only needed for SPAs or monorepo path prefixes)
+    rewrite:
+      strip_prefix: customer-funnel # Strip /customer-funnel prefix from paths
+      fallback: /index.html         # SPA fallback for client-side routing
     env:
       VITE_API_URL: https://ccc-api.waipu-dev.net
     depends_on:
@@ -41,9 +42,9 @@ services:
     path: ./apps/ccc
     command: pnpm dev
     port: 8081
-    domain: ccc                     # https://ccc.waipu-dev.net
-    spa:
-      fallback: /index.html
+    subdomain: ccc                  # https://ccc.waipu-dev.net
+    rewrite:
+      fallback: /index.html         # SPA fallback
     depends_on:
       - api
 
@@ -52,7 +53,7 @@ services:
     path: ./apps/api
     command: pnpm dev
     port: 3001
-    domain: ccc-api                 # https://ccc-api.waipu-dev.net
+    subdomain: ccc-api              # https://ccc-api.waipu-dev.net
     env:
       DATABASE_URL: postgresql://waipu:dev@localhost:5432/waipu_dev
       REDIS_URL: redis://localhost:6379
@@ -70,7 +71,7 @@ services:
     path: ./packages/ui
     command: pnpm storybook
     port: 6006
-    domain: storybook               # https://storybook.waipu-dev.net
+    subdomain: storybook            # https://storybook.waipu-dev.net
     autostart: false                # Don't start with `lokl up` (default: true)
 
   # Docker-based database
