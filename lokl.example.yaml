@@ -21,9 +21,10 @@ services:
     command: pnpm dev               # Command to start the service
     port: 8080                      # Port the service listens on
     subdomain: client               # Creates https://client.waipu-dev.net
-    spa:
-      root: customer-funnel         # Strip /customer-funnel prefix from paths (for monorepo builds)
-      fallback: /index.html         # Return this for non-asset paths (client-side routing)
+    # Optional: Path rewriting (only needed for SPAs or monorepo path prefixes)
+    rewrite:
+      strip_prefix: customer-funnel # Strip /customer-funnel prefix from paths
+      fallback: /index.html         # SPA fallback for client-side routing
     env:
       VITE_API_URL: https://ccc-api.waipu-dev.net
     depends_on:
@@ -42,8 +43,8 @@ services:
     command: pnpm dev
     port: 8081
     subdomain: ccc                  # https://ccc.waipu-dev.net
-    spa:
-      fallback: /index.html
+    rewrite:
+      fallback: /index.html         # SPA fallback
     depends_on:
       - api
 
