@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultPort     = 8443
+	defaultPort     = 443
 	defaultCertDir  = ".lokl/certs"
 	shutdownTimeout = 5 * time.Second
 )
@@ -43,20 +43,12 @@ func (p *Proxy) Setup() error {
 		return fmt.Errorf("no proxy domain configured")
 	}
 
-	// Ensure mkcert CA is installed
 	if err := p.certs.EnsureCA(); err != nil {
 		return fmt.Errorf("setting up CA: %w", err)
 	}
 
-	// Generate wildcard cert
 	if _, _, err := p.certs.Generate(domain); err != nil {
 		return fmt.Errorf("generating certificate: %w", err)
-	}
-
-	// Add DNS entries
-	domains := p.router.EnabledDomains()
-	if err := p.hosts.Add(domains); err != nil {
-		return fmt.Errorf("configuring DNS: %w", err)
 	}
 
 	return nil
@@ -75,7 +67,7 @@ func (p *Proxy) Start() error {
 	handler := NewHandler(p.router)
 
 	p.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", p.port),
+		Addr:    fmt.Sprintf("0.0.0.0:%d", p.port),
 		Handler: handler,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
@@ -124,4 +116,20 @@ func (p *Proxy) CertDir() string {
 
 func (p *Proxy) NeedsSudo() bool {
 	return p.hosts.NeedsSudo()
+}
+
+func (p *Proxy) UnresolvedDomains() []string {
+	return p.hosts.Unresolved(p.router.EnabledDomains())
+}
+
+func (p *Proxy) DNSBlock() string {
+	return p.hosts.Block(p.router.EnabledDomains())
+}
+
+func (p *Proxy) SetupDNS() error {
+	return p.hosts.Add(p.router.EnabledDomains())
+}
+
+func (p *Proxy) RemoveDNS() error {
+	return p.hosts.Remove()
 }

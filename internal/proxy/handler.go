@@ -37,6 +37,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
 	}
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		resp.Header.Set("X-Lokl-Proxy", "true")
+		return nil
+	}
 
 	// Preserve original host for backends that check it
 	r.Header.Set("X-Forwarded-Host", r.Host)

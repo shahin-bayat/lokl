@@ -2,12 +2,18 @@ package proxy
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	"net"
 	"os"
 	"strings"
+	"time"
 )
 
-const hostsFile = "/etc/hosts"
+const (
+	hostsFile        = "/etc/hosts"
+	dnsLookupTimeout = 2 * time.Second
+)
 
 type HostsManager struct {
 	project string
@@ -75,6 +81,43 @@ func (h *HostsManager) HasEntries() (bool, error) {
 		return false, fmt.Errorf("reading hosts file: %w", err)
 	}
 	return strings.Contains(string(content), h.startMarker()), nil
+}
+
+func (h *HostsManager) Unresolved(domains []string) []string {
+	var missing []string
+	for _, domain := range domains {
+		if !h.resolvesToLocalhost(domain) {
+			missing = append(missing, domain)
+		}
+	}
+	return missing
+}
+
+func (h *HostsManager) resolvesToLocalhost(domain string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), dnsLookupTimeout)
+	defer cancel()
+
+	addrs, err := net.DefaultResolver.LookupHost(ctx, domain)
+	if err != nil {
+		return false
+	}
+
+	for _, addr := range addrs {
+		if addr == "127.0.0.1" {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *HostsManager) Block(domains []string) string {
+	var b strings.Builder
+	b.WriteString(h.startMarker() + "\n")
+	for _, domain := range domains {
+		fmt.Fprintf(&b, "127.0.0.1 %s\n", domain)
+	}
+	b.WriteString(h.endMarker())
+	return b.String()
 }
 
 func (h *HostsManager) startMarker() string {
