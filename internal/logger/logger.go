@@ -26,13 +26,13 @@ func New(w io.Writer) *writer {
 func (l *writer) Infof(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	msg = colorize(msg)
-	fmt.Fprint(l.out, msg)
+	_, _ = fmt.Fprint(l.out, msg)
 }
 
 func (l *writer) Errorf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	msg = strings.ReplaceAll(msg, "✗", colorRed+"✗"+colorReset)
-	fmt.Fprint(l.out, msg)
+	_, _ = fmt.Fprint(l.out, msg)
 }
 
 func colorize(msg string) string {
