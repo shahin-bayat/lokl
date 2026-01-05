@@ -75,14 +75,6 @@ func (h *hostsManager) needsSudo() bool {
 	return false
 }
 
-func (h *hostsManager) hasEntries() (bool, error) {
-	content, err := os.ReadFile(hostsFile)
-	if err != nil {
-		return false, fmt.Errorf("reading hosts file: %w", err)
-	}
-	return strings.Contains(string(content), h.startMarker()), nil
-}
-
 func (h *hostsManager) unresolved(domains []string) []string {
 	var missing []string
 	for _, domain := range domains {
