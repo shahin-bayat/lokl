@@ -17,15 +17,15 @@ func TestNewRouter(t *testing.T) {
 		},
 	}
 
-	r := NewRouter(cfg)
+	r := newRouter(cfg)
 
-	if r.Domain() != "example.com" {
-		t.Errorf("Domain() = %q, want %q", r.Domain(), "example.com")
+	if r.domain() != "example.com" {
+		t.Errorf("domain() = %q, want %q", r.domain(), "example.com")
 	}
 
-	domains := r.Domains()
+	domains := r.domains()
 	if len(domains) != 2 {
-		t.Errorf("Domains() len = %d, want 2", len(domains))
+		t.Errorf("domains() len = %d, want 2", len(domains))
 	}
 }
 
@@ -45,7 +45,7 @@ func TestRouterMatch(t *testing.T) {
 		},
 	}
 
-	r := NewRouter(cfg)
+	r := newRouter(cfg)
 
 	tests := []struct {
 		name     string
@@ -61,18 +61,18 @@ func TestRouterMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			route := r.Match(tt.host)
+			rt := r.match(tt.host)
 			if tt.wantNil {
-				if route != nil {
-					t.Errorf("Match(%q) = %+v, want nil", tt.host, route)
+				if rt != nil {
+					t.Errorf("match(%q) = %+v, want nil", tt.host, rt)
 				}
 				return
 			}
-			if route == nil {
-				t.Fatalf("Match(%q) = nil, want route", tt.host)
+			if rt == nil {
+				t.Fatalf("match(%q) = nil, want route", tt.host)
 			}
-			if route.Port != tt.wantPort {
-				t.Errorf("Match(%q).Port = %d, want %d", tt.host, route.Port, tt.wantPort)
+			if rt.port != tt.wantPort {
+				t.Errorf("match(%q).port = %d, want %d", tt.host, rt.port, tt.wantPort)
 			}
 		})
 	}
@@ -93,17 +93,17 @@ func TestRouterMatchWithRewrite(t *testing.T) {
 		},
 	}
 
-	r := NewRouter(cfg)
-	route := r.Match("app.example.com")
+	r := newRouter(cfg)
+	rt := r.match("app.example.com")
 
-	if route.Rewrite == nil {
-		t.Fatal("Rewrite is nil")
+	if rt.rewrite == nil {
+		t.Fatal("rewrite is nil")
 	}
-	if route.Rewrite.StripPrefix != "web" {
-		t.Errorf("StripPrefix = %q, want %q", route.Rewrite.StripPrefix, "web")
+	if rt.rewrite.stripPrefix != "web" {
+		t.Errorf("stripPrefix = %q, want %q", rt.rewrite.stripPrefix, "web")
 	}
-	if route.Rewrite.Fallback != "/index.html" {
-		t.Errorf("Fallback = %q, want %q", route.Rewrite.Fallback, "/index.html")
+	if rt.rewrite.fallback != "/index.html" {
+		t.Errorf("fallback = %q, want %q", rt.rewrite.fallback, "/index.html")
 	}
 }
 
@@ -115,30 +115,30 @@ func TestRouterSetEnabled(t *testing.T) {
 		},
 	}
 
-	r := NewRouter(cfg)
+	r := newRouter(cfg)
 
 	// Initially enabled
-	if route := r.Match("app.example.com"); route == nil {
+	if rt := r.match("app.example.com"); rt == nil {
 		t.Fatal("route should be enabled initially")
 	}
 
 	// Disable
-	if !r.SetEnabled("app.example.com", false) {
-		t.Fatal("SetEnabled returned false")
+	if !r.setEnabled("app.example.com", false) {
+		t.Fatal("setEnabled returned false")
 	}
-	if route := r.Match("app.example.com"); route != nil {
+	if rt := r.match("app.example.com"); rt != nil {
 		t.Error("route should be nil when disabled")
 	}
 
 	// Re-enable
-	r.SetEnabled("app.example.com", true)
-	if route := r.Match("app.example.com"); route == nil {
+	r.setEnabled("app.example.com", true)
+	if rt := r.match("app.example.com"); rt == nil {
 		t.Error("route should be enabled again")
 	}
 
 	// Unknown domain
-	if r.SetEnabled("unknown.example.com", false) {
-		t.Error("SetEnabled should return false for unknown domain")
+	if r.setEnabled("unknown.example.com", false) {
+		t.Error("setEnabled should return false for unknown domain")
 	}
 }
 
@@ -151,15 +151,15 @@ func TestRouterEnabledDomains(t *testing.T) {
 		},
 	}
 
-	r := NewRouter(cfg)
+	r := newRouter(cfg)
 
-	if len(r.EnabledDomains()) != 2 {
-		t.Errorf("EnabledDomains() len = %d, want 2", len(r.EnabledDomains()))
+	if len(r.enabledDomains()) != 2 {
+		t.Errorf("enabledDomains() len = %d, want 2", len(r.enabledDomains()))
 	}
 
-	r.SetEnabled("app.example.com", false)
+	r.setEnabled("app.example.com", false)
 
-	if len(r.EnabledDomains()) != 1 {
-		t.Errorf("EnabledDomains() len = %d, want 1", len(r.EnabledDomains()))
+	if len(r.enabledDomains()) != 1 {
+		t.Errorf("enabledDomains() len = %d, want 1", len(r.enabledDomains()))
 	}
 }

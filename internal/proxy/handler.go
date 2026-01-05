@@ -9,28 +9,28 @@ import (
 	"strings"
 )
 
-type Handler struct {
-	router *Router
+type handler struct {
+	router *router
 }
 
-func NewHandler(router *Router) *Handler {
-	return &Handler{router: router}
+func newHandler(router *router) *handler {
+	return &handler{router: router}
 }
 
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	route := h.router.Match(r.Host)
-	if route == nil {
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	rt := h.router.match(r.Host)
+	if rt == nil {
 		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
 
-	if route.Rewrite != nil {
-		r.URL.Path = rewritePath(r.URL.Path, route.Rewrite)
+	if rt.rewrite != nil {
+		r.URL.Path = rewritePath(r.URL.Path, rt.rewrite)
 	}
 
 	target := &url.URL{
 		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", route.Port),
+		Host:   fmt.Sprintf("localhost:%d", rt.port),
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
@@ -49,10 +49,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-func rewritePath(p string, rw *RewriteConfig) string {
+func rewritePath(p string, rw *rewriteConfig) string {
 	// Strip prefix if configured
-	if rw.StripPrefix != "" {
-		prefix := "/" + rw.StripPrefix
+	if rw.stripPrefix != "" {
+		prefix := "/" + rw.stripPrefix
 		if after, found := strings.CutPrefix(p, prefix); found {
 			p = after
 			if p == "" {
@@ -62,8 +62,8 @@ func rewritePath(p string, rw *RewriteConfig) string {
 	}
 
 	// Apply fallback for non-asset paths
-	if rw.Fallback != "" && !isAssetPath(p) {
-		return rw.Fallback
+	if rw.fallback != "" && !isAssetPath(p) {
+		return rw.fallback
 	}
 
 	return p

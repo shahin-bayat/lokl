@@ -7,15 +7,15 @@ import (
 	"path/filepath"
 )
 
-type CertManager struct {
+type certManager struct {
 	dir string
 }
 
-func NewCertManager(dir string) *CertManager {
-	return &CertManager{dir: dir}
+func newCertManager(dir string) *certManager {
+	return &certManager{dir: dir}
 }
 
-func (c *CertManager) EnsureCA() error {
+func (c *certManager) ensureCA() error {
 	if err := c.checkMkcert(); err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (c *CertManager) EnsureCA() error {
 	return nil
 }
 
-func (c *CertManager) Generate(domain string) (certPath, keyPath string, err error) {
+func (c *certManager) generate(domain string) (certPath, keyPath string, err error) {
 	if err := c.checkMkcert(); err != nil {
 		return "", "", err
 	}
@@ -40,8 +40,8 @@ func (c *CertManager) Generate(domain string) (certPath, keyPath string, err err
 		return "", "", fmt.Errorf("creating cert directory: %w", err)
 	}
 
-	certPath = c.CertPath(domain)
-	keyPath = c.KeyPath(domain)
+	certPath = c.certPath(domain)
+	keyPath = c.keyPath(domain)
 
 	if fileExists(certPath) && fileExists(keyPath) {
 		return certPath, keyPath, nil
@@ -63,15 +63,15 @@ func (c *CertManager) Generate(domain string) (certPath, keyPath string, err err
 	return certPath, keyPath, nil
 }
 
-func (c *CertManager) CertPath(domain string) string {
+func (c *certManager) certPath(domain string) string {
 	return filepath.Join(c.dir, domain+".pem")
 }
 
-func (c *CertManager) KeyPath(domain string) string {
+func (c *certManager) keyPath(domain string) string {
 	return filepath.Join(c.dir, domain+"-key.pem")
 }
 
-func (c *CertManager) checkMkcert() error {
+func (c *certManager) checkMkcert() error {
 	_, err := exec.LookPath("mkcert")
 	if err != nil {
 		return fmt.Errorf("mkcert not found: install with 'brew install mkcert' or see https://github.com/FiloSottile/mkcert")
