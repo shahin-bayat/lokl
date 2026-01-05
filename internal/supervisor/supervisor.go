@@ -11,6 +11,7 @@ import (
 	"github.com/shahin-bayat/lokl/internal/config"
 	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
+	"github.com/shahin-bayat/lokl/internal/types"
 )
 
 type Supervisor struct {
@@ -44,17 +45,9 @@ func (s *Supervisor) Start() error {
 			continue
 		}
 
-		if svc.Image != "" {
-			continue
+		if err := s.StartService(name); err != nil {
+			return err
 		}
-
-		p := process.New(name, svc)
-
-		if err := p.Start(); err != nil {
-			return fmt.Errorf("starting %s: %w", name, err)
-		}
-
-		s.processes[name] = p
 		fmt.Printf("  ✓ Started %s\n", name)
 	}
 
@@ -65,9 +58,32 @@ func (s *Supervisor) Start() error {
 	return nil
 }
 
+func (s *Supervisor) StartService(name string) error {
+	svc, exists := s.cfg.Services[name]
+	if !exists {
+		return fmt.Errorf("unknown service: %s", name)
+	}
+
+	if _, running := s.processes[name]; running {
+		return nil // already running, not an error
+	}
+
+	if svc.Image != "" {
+		return fmt.Errorf("docker services not yet supported")
+	}
+
+	p := process.New(name, svc)
+	if err := p.Start(); err != nil {
+		return fmt.Errorf("starting %s: %w", name, err)
+	}
+
+	s.processes[name] = p
+	return nil
+}
+
 func (s *Supervisor) Stop() error {
-	for name, p := range s.processes {
-		if err := p.Stop(); err != nil {
+	for name := range s.processes {
+		if err := s.StopService(name); err != nil {
 			fmt.Fprintf(os.Stderr, "  ✗ Failed to stop %s: %v\n", name, err)
 		} else {
 			fmt.Printf("  ✓ Stopped %s\n", name)
@@ -79,6 +95,57 @@ func (s *Supervisor) Stop() error {
 	}
 
 	return nil
+}
+
+func (s *Supervisor) StopService(name string) error {
+	p, exists := s.processes[name]
+	if !exists {
+		return nil
+	}
+
+	if err := p.Stop(); err != nil {
+		return fmt.Errorf("stopping %s: %w", name, err)
+	}
+
+	delete(s.processes, name)
+	return nil
+}
+
+func (s *Supervisor) RestartService(name string) error {
+	if err := s.StopService(name); err != nil {
+		return err
+	}
+	return s.StartService(name)
+}
+
+func (s *Supervisor) Services() []types.ServiceInfo {
+	order, _ := process.SortByDependency(s.cfg.Services)
+
+	items := make([]types.ServiceInfo, 0, len(order))
+	for _, name := range order {
+		svc := s.cfg.Services[name]
+		item := types.ServiceInfo{
+			Name: name,
+			Port: svc.Port,
+		}
+
+		if svc.Subdomain != "" && s.cfg.Proxy.Domain != "" {
+			item.Domain = svc.Subdomain + "." + s.cfg.Proxy.Domain
+		}
+
+		if p, ok := s.processes[name]; ok {
+			item.Running = p.State == process.StateRunning
+			item.Healthy = p.Healthy
+		}
+
+		items = append(items, item)
+	}
+
+	return items
+}
+
+func (s *Supervisor) ProjectName() string {
+	return s.cfg.Name
 }
 
 func (s *Supervisor) Wait() {
@@ -127,12 +194,4 @@ func (s *Supervisor) startProxy() error {
 
 	fmt.Printf("  ✓ Proxy listening on :%d\n", s.proxy.Port())
 	return nil
-}
-
-func (s *Supervisor) Processes() map[string]*process.Process {
-	return s.processes
-}
-
-func (s *Supervisor) Config() *config.Config {
-	return s.cfg
 }
