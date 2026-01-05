@@ -3,10 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/logger"
 	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
 	"github.com/shahin-bayat/lokl/internal/supervisor"
@@ -43,16 +46,19 @@ var upCmd = &cobra.Command{
 			return process.New(name, svc)
 		}
 
-		fmt.Printf("\n  lokl - %s\n\n", cfg.Name)
+		log := logger.New(os.Stdout)
 
-		sup := supervisor.New(cfg, newProcess, proxy.New(cfg))
+		fmt.Printf("\nlokl - %s\n\n", cfg.Name)
+
+		sup := supervisor.New(cfg, newProcess, proxy.New(cfg), log)
 
 		if err := sup.Start(); err != nil {
 			return err
 		}
 
-		fmt.Println("\n  Press Ctrl+C to stop")
-		sup.Wait()
+		fmt.Println("\nPress Ctrl+C to stop")
+		waitForSignal()
+		fmt.Println("\nShutting down...")
 
 		if err := sup.Stop(); err != nil {
 			return err
@@ -136,4 +142,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfigFile, "config file path")
 	dnsCmd.AddCommand(dnsSetupCmd, dnsRemoveCmd)
 	rootCmd.AddCommand(upCmd, downCmd, statusCmd, dnsCmd)
+}
+
+func waitForSignal() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
 }

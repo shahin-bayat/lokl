@@ -3,10 +3,7 @@ package supervisor
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/shahin-bayat/lokl/internal/config"
 	"github.com/shahin-bayat/lokl/internal/types"
@@ -40,14 +37,16 @@ type Supervisor struct {
 	proxy      ProxyManager
 	newProcess ProcessFactory
 	processes  map[string]ProcessRunner
+	log        Logger
 }
 
-func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager) *Supervisor {
+func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager, log Logger) *Supervisor {
 	return &Supervisor{
 		cfg:        cfg,
 		proxy:      pm,
 		newProcess: pf,
 		processes:  make(map[string]ProcessRunner),
+		log:        log,
 	}
 }
 
@@ -71,7 +70,7 @@ func (s *Supervisor) Start() error {
 		if err := s.StartService(name); err != nil {
 			return err
 		}
-		fmt.Printf("  ✓ Started %s\n", name)
+		s.log.Infof("✓ Started %s\n", name)
 	}
 
 	if err := s.startProxy(); err != nil {
@@ -107,9 +106,9 @@ func (s *Supervisor) StartService(name string) error {
 func (s *Supervisor) Stop() error {
 	for name := range s.processes {
 		if err := s.StopService(name); err != nil {
-			fmt.Fprintf(os.Stderr, "  ✗ Failed to stop %s: %v\n", name, err)
+			s.log.Errorf("✗ Failed to stop %s: %v\n", name, err)
 		} else {
-			fmt.Printf("  ✓ Stopped %s\n", name)
+			s.log.Infof("✓ Stopped %s\n", name)
 		}
 	}
 
@@ -171,36 +170,29 @@ func (s *Supervisor) ProjectName() string {
 	return s.cfg.Name
 }
 
-func (s *Supervisor) Wait() {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
-	fmt.Println("\nShutting down...")
-}
-
 func (s *Supervisor) setupProxy() error {
 	if s.cfg.Proxy.Domain == "" {
 		return nil
 	}
 
-	fmt.Println("  Setting up proxy...")
+	s.log.Infof("Setting up proxy...\n")
 
 	if err := s.proxy.Setup(); err != nil {
 		return fmt.Errorf("proxy setup: %w", err)
 	}
-	fmt.Printf("  ✓ Certificates ready in %s\n", s.proxy.CertDir())
+	s.log.Infof("✓ Certificates ready in %s\n", s.proxy.CertDir())
 
 	unresolved := s.proxy.UnresolvedDomains()
 	if len(unresolved) > 0 {
-		fmt.Printf("\n  ⚠ DNS entries needed for: %s\n", strings.Join(unresolved, ", "))
-		fmt.Println("\n  Option 1 - Run:")
-		fmt.Println("    sudo lokl dns setup")
-		fmt.Println("\n  Option 2 - Add manually to /etc/hosts:")
-		fmt.Printf("    %s\n", strings.ReplaceAll(s.proxy.DNSBlock(), "\n", "\n    "))
+		s.log.Infof("\n⚠ DNS entries needed for: %s\n", strings.Join(unresolved, ", "))
+		s.log.Infof("\nOption 1 - Run:\n")
+		s.log.Infof("  sudo lokl dns setup\n")
+		s.log.Infof("\nOption 2 - Add manually to /etc/hosts:\n")
+		s.log.Infof("  %s\n", strings.ReplaceAll(s.proxy.DNSBlock(), "\n", "\n  "))
 		return fmt.Errorf("DNS not configured")
 	}
 
-	fmt.Printf("  ✓ DNS configured for %d domains\n", len(s.proxy.Domains()))
+	s.log.Infof("✓ DNS configured for %d domains\n", len(s.proxy.Domains()))
 	return nil
 }
 
@@ -211,10 +203,10 @@ func (s *Supervisor) startProxy() error {
 
 	go func() {
 		if err := s.proxy.Start(); err != nil && err.Error() != "http: Server closed" {
-			fmt.Fprintf(os.Stderr, "  ✗ Proxy error: %v\n", err)
+			s.log.Errorf("✗ Proxy error: %v\n", err)
 		}
 	}()
 
-	fmt.Printf("  ✓ Proxy listening on :%d\n", s.proxy.Port())
+	s.log.Infof("✓ Proxy listening on :%d\n", s.proxy.Port())
 	return nil
 }
