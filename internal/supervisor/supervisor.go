@@ -9,22 +9,45 @@ import (
 	"syscall"
 
 	"github.com/shahin-bayat/lokl/internal/config"
-	"github.com/shahin-bayat/lokl/internal/process"
-	"github.com/shahin-bayat/lokl/internal/proxy"
 	"github.com/shahin-bayat/lokl/internal/types"
 )
 
-type Supervisor struct {
-	cfg       *config.Config
-	proxy     *proxy.Proxy
-	processes map[string]*process.Process
+// ProcessRunner defines what supervisor needs from a running process.
+type ProcessRunner interface {
+	Start() error
+	Stop() error
+	IsRunning() bool
+	IsHealthy() bool
 }
 
-func New(cfg *config.Config) *Supervisor {
+// ProcessFactory creates a new process runner.
+type ProcessFactory func(name string, svc config.Service) ProcessRunner
+
+// ProxyManager defines what supervisor needs from the reverse proxy.
+type ProxyManager interface {
+	Setup() error
+	Start() error
+	Stop(cleanupDNS bool) error
+	CertDir() string
+	Port() int
+	Domains() []string
+	UnresolvedDomains() []string
+	DNSBlock() string
+}
+
+type Supervisor struct {
+	cfg        *config.Config
+	proxy      ProxyManager
+	newProcess ProcessFactory
+	processes  map[string]ProcessRunner
+}
+
+func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager) *Supervisor {
 	return &Supervisor{
-		cfg:       cfg,
-		proxy:     proxy.New(cfg),
-		processes: make(map[string]*process.Process),
+		cfg:        cfg,
+		proxy:      pm,
+		newProcess: pf,
+		processes:  make(map[string]ProcessRunner),
 	}
 }
 
@@ -33,7 +56,7 @@ func (s *Supervisor) Start() error {
 		return err
 	}
 
-	startSequence, err := process.SortByDependency(s.cfg.Services)
+	startSequence, err := config.SortByDependency(s.cfg.Services)
 	if err != nil {
 		return fmt.Errorf("resolving dependencies: %w", err)
 	}
@@ -72,7 +95,7 @@ func (s *Supervisor) StartService(name string) error {
 		return fmt.Errorf("docker services not yet supported")
 	}
 
-	p := process.New(name, svc)
+	p := s.newProcess(name, svc)
 	if err := p.Start(); err != nil {
 		return fmt.Errorf("starting %s: %w", name, err)
 	}
@@ -119,7 +142,7 @@ func (s *Supervisor) RestartService(name string) error {
 }
 
 func (s *Supervisor) Services() []types.ServiceInfo {
-	order, _ := process.SortByDependency(s.cfg.Services)
+	order, _ := config.SortByDependency(s.cfg.Services)
 
 	items := make([]types.ServiceInfo, 0, len(order))
 	for _, name := range order {
@@ -134,8 +157,8 @@ func (s *Supervisor) Services() []types.ServiceInfo {
 		}
 
 		if p, ok := s.processes[name]; ok {
-			item.Running = p.State == process.StateRunning
-			item.Healthy = p.Healthy
+			item.Running = p.IsRunning()
+			item.Healthy = p.IsHealthy()
 		}
 
 		items = append(items, item)

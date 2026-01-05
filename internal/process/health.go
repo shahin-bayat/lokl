@@ -8,14 +8,14 @@ import (
 )
 
 func (p *Process) startHealthCheck(ctx context.Context) {
-	if p.Config.Health == nil || p.Config.Health.Path == "" {
-		p.Healthy = true
+	if p.config.Health == nil || p.config.Health.Path == "" {
+		p.healthy = true
 		return
 	}
 
-	interval, _ := time.ParseDuration(p.Config.Health.Interval)
-	timeout, _ := time.ParseDuration(p.Config.Health.Timeout)
-	retries := *p.Config.Health.Retries
+	interval, _ := time.ParseDuration(p.config.Health.Interval)
+	timeout, _ := time.ParseDuration(p.config.Health.Timeout)
+	retries := *p.config.Health.Retries
 
 	failures := 0
 	ticker := time.NewTicker(interval)
@@ -31,13 +31,13 @@ func (p *Process) startHealthCheck(ctx context.Context) {
 			if p.checkHealth(timeout) {
 				failures = 0
 				p.mu.Lock()
-				p.Healthy = true
+				p.healthy = true
 				p.mu.Unlock()
 			} else {
 				failures++
 				if failures >= retries {
 					p.mu.Lock()
-					p.Healthy = false
+					p.healthy = false
 					p.mu.Unlock()
 				}
 			}
@@ -46,7 +46,7 @@ func (p *Process) startHealthCheck(ctx context.Context) {
 }
 
 func (p *Process) checkHealth(timeout time.Duration) bool {
-	url := fmt.Sprintf("http://localhost:%d%s", p.Config.Port, p.Config.Health.Path)
+	url := fmt.Sprintf("http://localhost:%d%s", p.config.Port, p.config.Health.Path)
 
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)

@@ -19,10 +19,10 @@ const (
 )
 
 type Process struct {
-	Name    string
-	Config  config.Service
-	State   State
-	Healthy bool
+	name    string
+	config  config.Service
+	state   state
+	healthy bool
 
 	cmd    *exec.Cmd
 	logs   *lineBuffer
@@ -32,28 +32,36 @@ type Process struct {
 
 func New(name string, cfg config.Service) *Process {
 	return &Process{
-		Name:   name,
-		Config: cfg,
-		State:  StateStopped,
+		name:   name,
+		config: cfg,
+		state:  stateStopped,
 	}
+}
+
+func (p *Process) IsRunning() bool {
+	return p.state == stateRunning
+}
+
+func (p *Process) IsHealthy() bool {
+	return p.healthy
 }
 
 func (p *Process) Start() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.State != StateStopped && p.State != StateFailed {
-		return fmt.Errorf("process %s: cannot start from state %s", p.Name, p.State)
+	if p.state != stateStopped && p.state != stateFailed {
+		return fmt.Errorf("process %s: cannot start from state %s", p.name, p.state)
 	}
 
-	p.State = StateStarting
+	p.state = stateStarting
 
 	// Use exec to replace shell process, making signal handling cleaner
-	p.cmd = exec.Command("sh", "-c", "exec "+p.Config.Command)
+	p.cmd = exec.Command("sh", "-c", "exec "+p.config.Command)
 	p.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	if p.Config.Path != "" {
-		p.cmd.Dir = p.Config.Path
+	if p.config.Path != "" {
+		p.cmd.Dir = p.config.Path
 	}
 
 	p.cmd.Env = p.buildEnv()
@@ -63,18 +71,18 @@ func (p *Process) Start() error {
 	p.cmd.Stderr = p.logs
 
 	if err := p.cmd.Start(); err != nil {
-		p.State = StateFailed
-		return fmt.Errorf("process %s: failed to start: %w", p.Name, err)
+		p.state = stateFailed
+		return fmt.Errorf("process %s: failed to start: %w", p.name, err)
 	}
 
-	p.State = StateRunning
+	p.state = stateRunning
 
 	// Watch for unexpected exit - if process dies while still "running", mark as failed
 	go func() {
 		_ = p.cmd.Wait()
 		p.mu.Lock()
-		if p.State == StateRunning {
-			p.State = StateFailed
+		if p.state == stateRunning {
+			p.state = stateFailed
 		}
 		p.mu.Unlock()
 	}()
@@ -88,11 +96,11 @@ func (p *Process) Start() error {
 
 func (p *Process) Stop() error {
 	p.mu.Lock()
-	if p.State != StateRunning && p.State != StateStarting {
+	if p.state != stateRunning && p.state != stateStarting {
 		p.mu.Unlock()
 		return nil
 	}
-	p.State = StateStopping
+	p.state = stateStopping
 	cmd := p.cmd
 	if p.cancel != nil {
 		p.cancel()
@@ -109,7 +117,7 @@ func (p *Process) Stop() error {
 	_ = cmd.Wait()
 
 	p.mu.Lock()
-	p.State = StateStopped
+	p.state = stateStopped
 	p.mu.Unlock()
 
 	return nil
@@ -117,15 +125,8 @@ func (p *Process) Stop() error {
 
 func (p *Process) buildEnv() []string {
 	env := os.Environ()
-	for k, v := range p.Config.Env {
+	for k, v := range p.config.Env {
 		env = append(env, k+"="+v)
 	}
 	return env
-}
-
-func (p *Process) Logs() []string {
-	if p.logs == nil {
-		return nil
-	}
-	return p.logs.Lines()
 }

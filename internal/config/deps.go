@@ -1,14 +1,10 @@
-package process
+package config
 
-import (
-	"fmt"
-
-	"github.com/shahin-bayat/lokl/internal/config"
-)
+import "fmt"
 
 // SortByDependency returns service names in start order using topological sort.
 // Services with no dependencies come first, then their dependents.
-func SortByDependency(services map[string]config.Service) ([]string, error) {
+func SortByDependency(services map[string]Service) ([]string, error) {
 	// inDegree: how many dependencies each service has
 	inDegree := make(map[string]int)
 	// dependents: who depends on this service

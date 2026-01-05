@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
 	"github.com/shahin-bayat/lokl/internal/supervisor"
 	"github.com/shahin-bayat/lokl/internal/version"
@@ -38,9 +39,13 @@ var upCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 
+		newProcess := func(name string, svc config.Service) supervisor.ProcessRunner {
+			return process.New(name, svc)
+		}
+
 		fmt.Printf("\n  lokl - %s\n\n", cfg.Name)
 
-		sup := supervisor.New(cfg)
+		sup := supervisor.New(cfg, newProcess, proxy.New(cfg))
 
 		if err := sup.Start(); err != nil {
 			return err
