@@ -1,14 +1,14 @@
 package config
 
 const (
-	RestartAlways    = "always"
-	RestartOnFailure = "on-failure"
-	RestartNever     = "never"
+	restartAlways    = "always"
+	restartOnFailure = "on-failure"
+	restartNever     = "never"
 
-	DefaultRestartPolicy  = RestartOnFailure
-	DefaultHealthInterval = "10s"
-	DefaultHealthTimeout  = "3s"
-	DefaultHealthRetries  = 3
+	defaultRestartPolicy  = restartOnFailure
+	defaultHealthInterval = "10s"
+	defaultHealthTimeout  = "3s"
+	defaultHealthRetries  = 3
 )
 
 func ApplyDefaults(cfg *Config) {
@@ -24,7 +24,7 @@ func ApplyDefaults(cfg *Config) {
 		}
 
 		if svc.Restart == "" {
-			svc.Restart = DefaultRestartPolicy
+			svc.Restart = defaultRestartPolicy
 		}
 
 		if svc.Health != nil {
@@ -37,13 +37,13 @@ func ApplyDefaults(cfg *Config) {
 
 func applyHealthDefaults(h *HealthConfig) {
 	if h.Interval == "" {
-		h.Interval = DefaultHealthInterval
+		h.Interval = defaultHealthInterval
 	}
 	if h.Timeout == "" {
-		h.Timeout = DefaultHealthTimeout
+		h.Timeout = defaultHealthTimeout
 	}
 	if h.Retries == nil {
-		r := DefaultHealthRetries
+		r := defaultHealthRetries
 		h.Retries = &r
 	}
 }

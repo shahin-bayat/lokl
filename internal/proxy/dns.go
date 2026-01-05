@@ -15,15 +15,15 @@ const (
 	dnsLookupTimeout = 2 * time.Second
 )
 
-type HostsManager struct {
+type hostsManager struct {
 	project string
 }
 
-func NewHostsManager(project string) *HostsManager {
-	return &HostsManager{project: project}
+func newHostsManager(project string) *hostsManager {
+	return &hostsManager{project: project}
 }
 
-func (h *HostsManager) Add(domains []string) error {
+func (h *hostsManager) add(domains []string) error {
 	if len(domains) == 0 {
 		return nil
 	}
@@ -51,7 +51,7 @@ func (h *HostsManager) Add(domains []string) error {
 	return nil
 }
 
-func (h *HostsManager) Remove() error {
+func (h *hostsManager) remove() error {
 	content, err := os.ReadFile(hostsFile)
 	if err != nil {
 		return fmt.Errorf("reading hosts file: %w", err)
@@ -66,7 +66,7 @@ func (h *HostsManager) Remove() error {
 	return nil
 }
 
-func (h *HostsManager) NeedsSudo() bool {
+func (h *hostsManager) needsSudo() bool {
 	f, err := os.OpenFile(hostsFile, os.O_WRONLY, 0o644)
 	if err != nil {
 		return true
@@ -75,15 +75,7 @@ func (h *HostsManager) NeedsSudo() bool {
 	return false
 }
 
-func (h *HostsManager) HasEntries() (bool, error) {
-	content, err := os.ReadFile(hostsFile)
-	if err != nil {
-		return false, fmt.Errorf("reading hosts file: %w", err)
-	}
-	return strings.Contains(string(content), h.startMarker()), nil
-}
-
-func (h *HostsManager) Unresolved(domains []string) []string {
+func (h *hostsManager) unresolved(domains []string) []string {
 	var missing []string
 	for _, domain := range domains {
 		if !h.resolvesToLocalhost(domain) {
@@ -93,7 +85,7 @@ func (h *HostsManager) Unresolved(domains []string) []string {
 	return missing
 }
 
-func (h *HostsManager) resolvesToLocalhost(domain string) bool {
+func (h *hostsManager) resolvesToLocalhost(domain string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), dnsLookupTimeout)
 	defer cancel()
 
@@ -110,7 +102,7 @@ func (h *HostsManager) resolvesToLocalhost(domain string) bool {
 	return false
 }
 
-func (h *HostsManager) Block(domains []string) string {
+func (h *hostsManager) block(domains []string) string {
 	var b strings.Builder
 	b.WriteString(h.startMarker() + "\n")
 	for _, domain := range domains {
@@ -120,15 +112,15 @@ func (h *HostsManager) Block(domains []string) string {
 	return b.String()
 }
 
-func (h *HostsManager) startMarker() string {
+func (h *hostsManager) startMarker() string {
 	return fmt.Sprintf("# lokl:%s - START", h.project)
 }
 
-func (h *HostsManager) endMarker() string {
+func (h *hostsManager) endMarker() string {
 	return fmt.Sprintf("# lokl:%s - END", h.project)
 }
 
-func (h *HostsManager) removeBlock(content string) string {
+func (h *hostsManager) removeBlock(content string) string {
 	startMarker := h.startMarker()
 	endMarker := h.endMarker()
 

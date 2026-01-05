@@ -3,7 +3,7 @@ package proxy
 import "testing"
 
 func TestHostsManagerRemoveBlock(t *testing.T) {
-	h := NewHostsManager("myproject")
+	h := newHostsManager("myproject")
 
 	tests := []struct {
 		name    string
@@ -76,7 +76,7 @@ func TestHostsManagerRemoveBlock(t *testing.T) {
 }
 
 func TestHostsManagerMarkers(t *testing.T) {
-	h := NewHostsManager("testproject")
+	h := newHostsManager("testproject")
 
 	if h.startMarker() != "# lokl:testproject - START" {
 		t.Errorf("startMarker() = %q", h.startMarker())

@@ -6,27 +6,27 @@ import (
 	"github.com/shahin-bayat/lokl/internal/config"
 )
 
-type Route struct {
-	Domain  string
-	Port    int
-	Rewrite *RewriteConfig
-	Enabled bool
+type route struct {
+	domain  string
+	port    int
+	rewrite *rewriteConfig
+	enabled bool
 }
 
-type RewriteConfig struct {
-	StripPrefix string
-	Fallback    string
+type rewriteConfig struct {
+	stripPrefix string
+	fallback    string
 }
 
-type Router struct {
-	domain string
-	routes map[string]*Route
+type router struct {
+	baseDomain string
+	routes     map[string]*route
 }
 
-func NewRouter(cfg *config.Config) *Router {
-	r := &Router{
-		domain: cfg.Proxy.Domain,
-		routes: make(map[string]*Route),
+func newRouter(cfg *config.Config) *router {
+	r := &router{
+		baseDomain: cfg.Proxy.Domain,
+		routes:     make(map[string]*route),
 	}
 
 	for _, svc := range cfg.Services {
@@ -39,38 +39,38 @@ func NewRouter(cfg *config.Config) *Router {
 			fqdn = svc.Subdomain + "." + cfg.Proxy.Domain
 		}
 
-		route := &Route{
-			Domain:  fqdn,
-			Port:    svc.Port,
-			Enabled: true,
+		rt := &route{
+			domain:  fqdn,
+			port:    svc.Port,
+			enabled: true,
 		}
 
 		if svc.Rewrite != nil {
-			route.Rewrite = &RewriteConfig{
-				StripPrefix: svc.Rewrite.StripPrefix,
-				Fallback:    svc.Rewrite.Fallback,
+			rt.rewrite = &rewriteConfig{
+				stripPrefix: svc.Rewrite.StripPrefix,
+				fallback:    svc.Rewrite.Fallback,
 			}
 		}
 
-		r.routes[fqdn] = route
+		r.routes[fqdn] = rt
 	}
 
 	return r
 }
 
-func (r *Router) Match(host string) *Route {
+func (r *router) match(host string) *route {
 	if idx := strings.LastIndex(host, ":"); idx != -1 {
 		host = host[:idx]
 	}
 
-	route, ok := r.routes[host]
-	if !ok || !route.Enabled {
+	rt, ok := r.routes[host]
+	if !ok || !rt.enabled {
 		return nil
 	}
-	return route
+	return rt
 }
 
-func (r *Router) Domains() []string {
+func (r *router) domains() []string {
 	domains := make([]string, 0, len(r.routes))
 	for domain := range r.routes {
 		domains = append(domains, domain)
@@ -78,25 +78,25 @@ func (r *Router) Domains() []string {
 	return domains
 }
 
-func (r *Router) EnabledDomains() []string {
+func (r *router) enabledDomains() []string {
 	var domains []string
-	for domain, route := range r.routes {
-		if route.Enabled {
+	for domain, rt := range r.routes {
+		if rt.enabled {
 			domains = append(domains, domain)
 		}
 	}
 	return domains
 }
 
-func (r *Router) Domain() string {
-	return r.domain
+func (r *router) domain() string {
+	return r.baseDomain
 }
 
-func (r *Router) SetEnabled(domain string, enabled bool) bool {
-	route, ok := r.routes[domain]
+func (r *router) setEnabled(domain string, enabled bool) bool {
+	rt, ok := r.routes[domain]
 	if !ok {
 		return false
 	}
-	route.Enabled = enabled
+	rt.enabled = enabled
 	return true
 }

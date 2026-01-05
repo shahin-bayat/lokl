@@ -20,9 +20,9 @@ const (
 
 type Proxy struct {
 	cfg    *config.Config
-	router *Router
-	certs  *CertManager
-	hosts  *HostsManager
+	router *router
+	certs  *certManager
+	hosts  *hostsManager
 	server *http.Server
 	port   int
 }
@@ -30,24 +30,24 @@ type Proxy struct {
 func New(cfg *config.Config) *Proxy {
 	return &Proxy{
 		cfg:    cfg,
-		router: NewRouter(cfg),
-		certs:  NewCertManager(defaultCertDir),
-		hosts:  NewHostsManager(cfg.Name),
+		router: newRouter(cfg),
+		certs:  newCertManager(defaultCertDir),
+		hosts:  newHostsManager(cfg.Name),
 		port:   defaultPort,
 	}
 }
 
 func (p *Proxy) Setup() error {
-	domain := p.router.Domain()
+	domain := p.router.domain()
 	if domain == "" {
 		return fmt.Errorf("no proxy domain configured")
 	}
 
-	if err := p.certs.EnsureCA(); err != nil {
+	if err := p.certs.ensureCA(); err != nil {
 		return fmt.Errorf("setting up CA: %w", err)
 	}
 
-	if _, _, err := p.certs.Generate(domain); err != nil {
+	if _, _, err := p.certs.generate(domain); err != nil {
 		return fmt.Errorf("generating certificate: %w", err)
 	}
 
@@ -55,16 +55,16 @@ func (p *Proxy) Setup() error {
 }
 
 func (p *Proxy) Start() error {
-	domain := p.router.Domain()
-	certPath := p.certs.CertPath(domain)
-	keyPath := p.certs.KeyPath(domain)
+	domain := p.router.domain()
+	certPath := p.certs.certPath(domain)
+	keyPath := p.certs.keyPath(domain)
 
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return fmt.Errorf("loading certificate: %w", err)
 	}
 
-	handler := NewHandler(p.router)
+	handler := newHandler(p.router)
 
 	p.server = &http.Server{
 		Addr:    fmt.Sprintf("0.0.0.0:%d", p.port),
@@ -90,7 +90,7 @@ func (p *Proxy) Stop(cleanupDNS bool) error {
 	}
 
 	if cleanupDNS {
-		if err := p.hosts.Remove(); err != nil {
+		if err := p.hosts.remove(); err != nil {
 			errs = append(errs, fmt.Errorf("removing DNS entries: %w", err))
 		}
 	}
@@ -106,7 +106,7 @@ func (p *Proxy) Port() int {
 }
 
 func (p *Proxy) Domains() []string {
-	return p.router.Domains()
+	return p.router.domains()
 }
 
 func (p *Proxy) CertDir() string {
@@ -115,21 +115,21 @@ func (p *Proxy) CertDir() string {
 }
 
 func (p *Proxy) NeedsSudo() bool {
-	return p.hosts.NeedsSudo()
+	return p.hosts.needsSudo()
 }
 
 func (p *Proxy) UnresolvedDomains() []string {
-	return p.hosts.Unresolved(p.router.EnabledDomains())
+	return p.hosts.unresolved(p.router.enabledDomains())
 }
 
 func (p *Proxy) DNSBlock() string {
-	return p.hosts.Block(p.router.EnabledDomains())
+	return p.hosts.block(p.router.enabledDomains())
 }
 
 func (p *Proxy) SetupDNS() error {
-	return p.hosts.Add(p.router.EnabledDomains())
+	return p.hosts.add(p.router.enabledDomains())
 }
 
 func (p *Proxy) RemoveDNS() error {
-	return p.hosts.Remove()
+	return p.hosts.remove()
 }

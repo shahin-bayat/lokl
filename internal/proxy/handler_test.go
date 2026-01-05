@@ -6,61 +6,61 @@ func TestRewritePath(t *testing.T) {
 	tests := []struct {
 		name string
 		path string
-		rw   *RewriteConfig
+		rw   *rewriteConfig
 		want string
 	}{
 		{
 			name: "strip prefix",
 			path: "/customer-funnel/dashboard",
-			rw:   &RewriteConfig{StripPrefix: "customer-funnel"},
+			rw:   &rewriteConfig{stripPrefix: "customer-funnel"},
 			want: "/dashboard",
 		},
 		{
 			name: "strip prefix root",
 			path: "/customer-funnel",
-			rw:   &RewriteConfig{StripPrefix: "customer-funnel"},
+			rw:   &rewriteConfig{stripPrefix: "customer-funnel"},
 			want: "/",
 		},
 		{
 			name: "strip prefix with trailing slash",
 			path: "/customer-funnel/",
-			rw:   &RewriteConfig{StripPrefix: "customer-funnel"},
+			rw:   &rewriteConfig{stripPrefix: "customer-funnel"},
 			want: "/",
 		},
 		{
 			name: "no match prefix",
 			path: "/other/path",
-			rw:   &RewriteConfig{StripPrefix: "customer-funnel"},
+			rw:   &rewriteConfig{stripPrefix: "customer-funnel"},
 			want: "/other/path",
 		},
 		{
 			name: "fallback for non-asset",
 			path: "/dashboard",
-			rw:   &RewriteConfig{Fallback: "/index.html"},
+			rw:   &rewriteConfig{fallback: "/index.html"},
 			want: "/index.html",
 		},
 		{
 			name: "no fallback for asset",
 			path: "/assets/main.js",
-			rw:   &RewriteConfig{Fallback: "/index.html"},
+			rw:   &rewriteConfig{fallback: "/index.html"},
 			want: "/assets/main.js",
 		},
 		{
 			name: "strip prefix then fallback",
 			path: "/customer-funnel/dashboard",
-			rw:   &RewriteConfig{StripPrefix: "customer-funnel", Fallback: "/index.html"},
+			rw:   &rewriteConfig{stripPrefix: "customer-funnel", fallback: "/index.html"},
 			want: "/index.html",
 		},
 		{
 			name: "strip prefix keep asset",
 			path: "/customer-funnel/assets/main.js",
-			rw:   &RewriteConfig{StripPrefix: "customer-funnel", Fallback: "/index.html"},
+			rw:   &rewriteConfig{stripPrefix: "customer-funnel", fallback: "/index.html"},
 			want: "/assets/main.js",
 		},
 		{
 			name: "empty config",
 			path: "/some/path",
-			rw:   &RewriteConfig{},
+			rw:   &rewriteConfig{},
 			want: "/some/path",
 		},
 	}

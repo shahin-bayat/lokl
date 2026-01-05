@@ -1,26 +1,26 @@
 package process
 
-type State int
+type state int
 
 const (
-	StateStopped State = iota
-	StateStarting
-	StateRunning
-	StateStopping
-	StateFailed
+	stateStopped state = iota
+	stateStarting
+	stateRunning
+	stateStopping
+	stateFailed
 )
 
-func (s State) String() string {
+func (s state) String() string {
 	switch s {
-	case StateStopped:
+	case stateStopped:
 		return "stopped"
-	case StateStarting:
+	case stateStarting:
 		return "starting"
-	case StateRunning:
+	case stateRunning:
 		return "running"
-	case StateStopping:
+	case stateStopping:
 		return "stopping"
-	case StateFailed:
+	case stateFailed:
 		return "failed"
 	default:
 		return "unknown"
