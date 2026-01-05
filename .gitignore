@@ -2,6 +2,9 @@
 /lokl
 /lokl.exe
 
+# Test sandbox
+.sandbox/
+
 # Build output
 /dist/
 
