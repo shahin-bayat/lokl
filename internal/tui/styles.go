@@ -30,6 +30,10 @@ var (
 
 	styleDomain = lipgloss.NewStyle().
 			Foreground(colorMuted)
+
+	styleLink = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00BFFF")).
+			Bold(true)
 )
 
 func stateIndicator(running, healthy bool) string {

@@ -64,9 +64,10 @@ func (r *router) match(host string) *route {
 	}
 
 	rt, ok := r.routes[host]
-	if !ok || !rt.enabled {
+	if !ok {
 		return nil
 	}
+	// Return route even when disabled - handler decides local vs remote
 	return rt
 }
 

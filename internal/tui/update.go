@@ -69,6 +69,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			_ = m.controller.RestartService(svc.Name)
 		}
 
+	case "p":
+		if svc := m.selectedService(); svc != nil && svc.Domain != "" {
+			_, _ = m.controller.ToggleProxy(svc.Name)
+			m.refreshServices()
+		}
+
 	case "l":
 		m.showLogs = !m.showLogs
 	}
