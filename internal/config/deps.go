@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // SortByDependency returns service names in start order using topological sort.
 // Services with no dependencies come first, then their dependents.
@@ -24,13 +27,14 @@ func SortByDependency(services map[string]Service) ([]string, error) {
 		}
 	}
 
-	// Start with services that have no dependencies
+	// Start with services that have no dependencies (sorted for stable order)
 	var queue []string
 	for name, degree := range inDegree {
 		if degree == 0 {
 			queue = append(queue, name)
 		}
 	}
+	sort.Strings(queue)
 
 	var result []string
 	for len(queue) > 0 {
@@ -38,13 +42,16 @@ func SortByDependency(services map[string]Service) ([]string, error) {
 		queue = queue[1:]
 		result = append(result, name)
 
-		// Decrement in-degree for dependents, add to queue if ready
+		// Collect ready dependents and sort for stable order
+		var ready []string
 		for _, dependent := range dependents[name] {
 			inDegree[dependent]--
 			if inDegree[dependent] == 0 {
-				queue = append(queue, dependent)
+				ready = append(ready, dependent)
 			}
 		}
+		sort.Strings(ready)
+		queue = append(queue, ready...)
 	}
 
 	if len(result) != len(services) {
