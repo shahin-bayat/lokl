@@ -19,6 +19,11 @@ func (m Model) View() string {
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderServices())
+
+	if m.showLogs {
+		b.WriteString(m.renderLogs())
+	}
+
 	b.WriteString("\n")
 	b.WriteString(m.renderStatusBar())
 
@@ -112,12 +117,46 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
 	return row
 }
 
+func (m Model) renderLogs() string {
+	svc := m.selectedService()
+	if svc == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(styleDomain.Render(fmt.Sprintf("─── Logs: %s ", svc.Name)))
+	b.WriteString(styleDomain.Render(strings.Repeat("─", 40)))
+	b.WriteString("\n\n")
+
+	logs := m.controller.ServiceLogs(svc.Name)
+	if len(logs) == 0 {
+		b.WriteString(styleStopped.Render("  No logs available"))
+		b.WriteString("\n")
+		return b.String()
+	}
+
+	// Show last 10 lines
+	start := 0
+	if len(logs) > 10 {
+		start = len(logs) - 10
+	}
+	for _, line := range logs[start:] {
+		b.WriteString("  ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
 func (m Model) renderStatusBar() string {
 	keys := []string{
 		styleKeyHint.Render("j/k") + " navigate",
 		styleKeyHint.Render("s") + " start",
 		styleKeyHint.Render("x") + " stop",
 		styleKeyHint.Render("r") + " restart",
+		styleKeyHint.Render("l") + " logs",
 		styleKeyHint.Render("q") + " quit",
 	}
 

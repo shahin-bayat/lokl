@@ -68,6 +68,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if svc := m.selectedService(); svc != nil {
 			_ = m.controller.RestartService(svc.Name)
 		}
+
+	case "l":
+		m.showLogs = !m.showLogs
 	}
 
 	return m, nil

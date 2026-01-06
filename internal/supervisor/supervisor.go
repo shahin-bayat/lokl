@@ -15,6 +15,7 @@ type ProcessRunner interface {
 	Stop() error
 	IsRunning() bool
 	IsHealthy() bool
+	Logs() []string
 }
 
 // ProcessFactory creates a new process runner.
@@ -168,6 +169,13 @@ func (s *Supervisor) Services() []types.ServiceInfo {
 
 func (s *Supervisor) ProjectName() string {
 	return s.cfg.Name
+}
+
+func (s *Supervisor) ServiceLogs(name string) []string {
+	if p, ok := s.processes[name]; ok {
+		return p.Logs()
+	}
+	return nil
 }
 
 func (s *Supervisor) setupProxy() error {

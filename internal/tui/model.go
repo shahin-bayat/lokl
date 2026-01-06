@@ -8,6 +8,7 @@ type ServiceController interface {
 	StopService(name string) error
 	RestartService(name string) error
 	Services() []types.ServiceInfo
+	ServiceLogs(name string) []string
 	ProjectName() string
 }
 
@@ -16,6 +17,7 @@ type Model struct {
 	controller  ServiceController
 	services    []types.ServiceInfo
 	selectedIdx int
+	showLogs    bool
 	width       int
 	height      int
 	quitting    bool
