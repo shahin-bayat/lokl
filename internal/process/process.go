@@ -46,6 +46,13 @@ func (p *Process) IsHealthy() bool {
 	return p.healthy
 }
 
+func (p *Process) Logs() []string {
+	if p.logs == nil {
+		return nil
+	}
+	return p.logs.Lines()
+}
+
 func (p *Process) Start() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
