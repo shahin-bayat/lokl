@@ -31,6 +31,9 @@ type ProxyManager interface {
 	Domains() []string
 	UnresolvedDomains() []string
 	DNSBlock() string
+	EnableProxy(domain string) bool
+	DisableProxy(domain string) bool
+	IsProxyEnabled(domain string) bool
 }
 
 type Supervisor struct {
@@ -141,6 +144,28 @@ func (s *Supervisor) RestartService(name string) error {
 	return s.StartService(name)
 }
 
+// ToggleProxy toggles between local and remote routing for a service.
+func (s *Supervisor) ToggleProxy(name string) (bool, error) {
+	svc, exists := s.cfg.Services[name]
+	if !exists {
+		return false, fmt.Errorf("unknown service: %s", name)
+	}
+
+	if svc.Subdomain == "" || s.cfg.Proxy.Domain == "" {
+		return false, fmt.Errorf("service %s has no proxy domain", name)
+	}
+
+	domain := svc.Subdomain + "." + s.cfg.Proxy.Domain
+
+	if s.proxy.IsProxyEnabled(domain) {
+		s.proxy.DisableProxy(domain)
+		return false, nil
+	}
+
+	s.proxy.EnableProxy(domain)
+	return true, nil
+}
+
 func (s *Supervisor) Services() []types.ServiceInfo {
 	order, _ := config.SortByDependency(s.cfg.Services)
 
@@ -154,6 +179,7 @@ func (s *Supervisor) Services() []types.ServiceInfo {
 
 		if svc.Subdomain != "" && s.cfg.Proxy.Domain != "" {
 			item.Domain = svc.Subdomain + "." + s.cfg.Proxy.Domain
+			item.ProxyEnabled = s.proxy.IsProxyEnabled(item.Domain)
 		}
 
 		if p, ok := s.processes[name]; ok {

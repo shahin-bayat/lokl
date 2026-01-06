@@ -7,6 +7,7 @@ type ServiceController interface {
 	StartService(name string) error
 	StopService(name string) error
 	RestartService(name string) error
+	ToggleProxy(name string) (bool, error)
 	Services() []types.ServiceInfo
 	ServiceLogs(name string) []string
 	ProjectName() string

@@ -71,30 +71,27 @@ func (m Model) renderServices() string {
 }
 
 func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
-	// Selection indicator
 	cursor := "  "
 	if selected {
 		cursor = styleKeyHint.Render("▸ ")
 	}
 
-	// State indicator
 	indicator := stateIndicator(svc.Running, svc.Healthy)
-
-	// Name (fixed width)
 	name := fmt.Sprintf("%-16s", svc.Name)
 
-	// Domain or dash
-	domain := "-"
-	if svc.Domain != "" {
-		domain = fmt.Sprintf("https://%s", svc.Domain)
+	var domain string
+	if svc.Domain == "" {
+		domain = styleDomain.Render(fmt.Sprintf("%-36s", "-"))
+	} else if svc.ProxyEnabled {
+		url := fmt.Sprintf("https://%s", svc.Domain)
+		domain = "  " + styleLink.Render(url)
+	} else {
+		url := fmt.Sprintf("https://%s", svc.Domain)
+		domain = styleFailed.Render("↗") + " " + styleDomain.Render(url)
 	}
-	domain = fmt.Sprintf("%-32s", domain)
-	domain = styleDomain.Render(domain)
 
-	// Port
 	port := fmt.Sprintf(":%d", svc.Port)
 
-	// Status text
 	status := "stopped"
 	statusStyle := styleStopped
 	if svc.Running {
@@ -156,6 +153,7 @@ func (m Model) renderStatusBar() string {
 		styleKeyHint.Render("s") + " start",
 		styleKeyHint.Render("x") + " stop",
 		styleKeyHint.Render("r") + " restart",
+		styleKeyHint.Render("p") + " toggle",
 		styleKeyHint.Render("l") + " logs",
 		styleKeyHint.Render("q") + " quit",
 	}
