@@ -13,12 +13,16 @@ import (
 	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
 	"github.com/shahin-bayat/lokl/internal/supervisor"
+	"github.com/shahin-bayat/lokl/internal/tui"
 	"github.com/shahin-bayat/lokl/internal/version"
 )
 
 const defaultConfigFile = "lokl.yaml"
 
-var configFile string
+var (
+	configFile string
+	detach     bool
+)
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
@@ -47,24 +51,25 @@ var upCmd = &cobra.Command{
 		}
 
 		log := logger.New(os.Stdout)
-
-		fmt.Printf("\nlokl - %s\n\n", cfg.Name)
-
 		sup := supervisor.New(cfg, newProcess, proxy.New(cfg), log)
 
 		if err := sup.Start(); err != nil {
 			return err
 		}
 
-		fmt.Println("\nPress Ctrl+C to stop")
-		waitForSignal()
-		fmt.Println("\nShutting down...")
-
-		if err := sup.Stop(); err != nil {
-			return err
+		if detach {
+			log.Infof("\nPress Ctrl+C to stop\n")
+			waitForSignal()
+			log.Infof("\nShutting down...\n")
+		} else {
+			app := tui.New(sup)
+			if err := app.Run(); err != nil {
+				_ = sup.Stop()
+				return err
+			}
 		}
 
-		return nil
+		return sup.Stop()
 	},
 }
 
@@ -140,6 +145,7 @@ var dnsRemoveCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfigFile, "config file path")
+	upCmd.Flags().BoolVarP(&detach, "detach", "d", false, "run without TUI")
 	dnsCmd.AddCommand(dnsSetupCmd, dnsRemoveCmd)
 	rootCmd.AddCommand(upCmd, downCmd, statusCmd, dnsCmd)
 }
