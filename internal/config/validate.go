@@ -44,6 +44,10 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		return fmt.Errorf("service %q: port is required when subdomain is set", name)
 	}
 
+	if svc.Health != nil && svc.Health.Path != "" && svc.Port == 0 {
+		return fmt.Errorf("service %q: port is required when health check is configured", name)
+	}
+
 	for _, dep := range svc.DependsOn {
 		if _, exists := services[dep]; !exists {
 			return fmt.Errorf("service %q: depends_on references unknown service %q", name, dep)

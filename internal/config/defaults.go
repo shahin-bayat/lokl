@@ -1,5 +1,7 @@
 package config
 
+import "maps"
+
 const (
 	restartAlways    = "always"
 	restartOnFailure = "on-failure"
@@ -29,6 +31,13 @@ func ApplyDefaults(cfg *Config) {
 
 		if svc.Health != nil {
 			applyHealthDefaults(svc.Health)
+		}
+
+		if len(cfg.Env) > 0 {
+			merged := make(map[string]string, len(cfg.Env)+len(svc.Env))
+			maps.Copy(merged, cfg.Env)
+			maps.Copy(merged, svc.Env)
+			svc.Env = merged
 		}
 
 		cfg.Services[name] = svc
