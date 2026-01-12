@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -46,12 +47,12 @@ var upCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 
-		newProcess := func(name string, svc config.Service) supervisor.ProcessRunner {
+		processRunner := func(name string, svc config.Service) supervisor.ProcessRunner {
 			return process.New(name, svc)
 		}
 
 		log := logger.New(os.Stdout)
-		sup := supervisor.New(cfg, newProcess, proxy.New(cfg), log)
+		sup := supervisor.New(cfg, processRunner, proxy.New(cfg), log)
 
 		if err := sup.Start(); err != nil {
 			return err
@@ -139,6 +140,12 @@ var dnsRemoveCmd = &cobra.Command{
 		}
 
 		fmt.Println("✓ Removed DNS entries from /etc/hosts")
+		fmt.Println("\nTo flush DNS cache:")
+		if runtime.GOOS == "darwin" {
+			fmt.Println("  sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder")
+		} else {
+			fmt.Println("  sudo systemd-resolve --flush-caches")
+		}
 		return nil
 	},
 }
