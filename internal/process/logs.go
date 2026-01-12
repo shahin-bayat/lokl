@@ -5,21 +5,21 @@ import (
 	"sync"
 )
 
-type lineBuffer struct {
+type logs struct {
 	lines   []string
 	partial string // incomplete line (no newline yet)
 	max     int
 	mu      sync.Mutex
 }
 
-func newLineBuffer(max int) *lineBuffer {
-	return &lineBuffer{
+func newLogs(max int) *logs {
+	return &logs{
 		lines: make([]string, 0, max),
 		max:   max,
 	}
 }
 
-func (b *lineBuffer) Write(p []byte) (n int, err error) {
+func (b *logs) Write(p []byte) (n int, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -40,7 +40,7 @@ func (b *lineBuffer) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (b *lineBuffer) Lines() []string {
+func (b *logs) Lines() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

@@ -9,7 +9,9 @@ import (
 
 func (p *Process) startHealthCheck(ctx context.Context) {
 	if p.config.Health == nil || p.config.Health.Path == "" {
+		p.mu.Lock()
 		p.healthy = true
+		p.mu.Unlock()
 		return
 	}
 
