@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -30,6 +31,7 @@ const (
 type handler struct {
 	router   *router
 	dnsCache map[string]string // domain -> IP cache
+	dnsMu    sync.RWMutex
 }
 
 func newHandler(router *router) *handler {
@@ -41,7 +43,10 @@ func newHandler(router *router) *handler {
 
 // resolveViaDNS queries external DNS directly, bypassing /etc/hosts
 func (h *handler) resolveViaDNS(host string) (string, error) {
-	if ip, ok := h.dnsCache[host]; ok {
+	h.dnsMu.RLock()
+	ip, ok := h.dnsCache[host]
+	h.dnsMu.RUnlock()
+	if ok {
 		return ip, nil
 	}
 
@@ -57,7 +62,9 @@ func (h *handler) resolveViaDNS(host string) (string, error) {
 	for _, ans := range r.Answer {
 		if a, ok := ans.(*dns.A); ok {
 			ip := a.A.String()
+			h.dnsMu.Lock()
 			h.dnsCache[host] = ip
+			h.dnsMu.Unlock()
 			return ip, nil
 		}
 	}
@@ -107,7 +114,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var target *url.URL
 	var transport http.RoundTripper
 
-	if rt.enabled {
+	if rt.enabled.Load() {
 		if rt.rewrite != nil {
 			r.URL.Path = rewritePath(r.URL.Path, rt.rewrite)
 		}
@@ -131,7 +138,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Director: func(req *http.Request) {
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
-			if !rt.enabled {
+			if !rt.enabled.Load() {
 				// Only set Host header for remote - local services expect original host
 				req.Host = target.Host
 			}
@@ -148,7 +155,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			resp.Header.Del("ETag")
 			resp.Header.Del("Last-Modified")
 
-			if rt.enabled {
+			if rt.enabled.Load() {
 				resp.Header.Set("X-Lokl-Proxy", "local")
 			} else {
 				resp.Header.Set("X-Lokl-Proxy", "remote")

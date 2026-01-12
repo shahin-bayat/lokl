@@ -150,5 +150,5 @@ func (p *Proxy) IsProxyEnabled(domain string) bool {
 	if rt == nil {
 		return false
 	}
-	return rt.enabled
+	return rt.enabled.Load()
 }

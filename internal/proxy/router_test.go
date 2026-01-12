@@ -126,13 +126,13 @@ func TestRouterSetEnabled(t *testing.T) {
 	if !r.setEnabled("app.example.com", false) {
 		t.Fatal("setEnabled returned false")
 	}
-	if rt := r.match("app.example.com"); rt == nil || rt.enabled {
+	if rt := r.match("app.example.com"); rt == nil || rt.enabled.Load() {
 		t.Error("route should exist but be disabled")
 	}
 
 	// Re-enable
 	r.setEnabled("app.example.com", true)
-	if rt := r.match("app.example.com"); rt == nil || !rt.enabled {
+	if rt := r.match("app.example.com"); rt == nil || !rt.enabled.Load() {
 		t.Error("route should be enabled again")
 	}
 

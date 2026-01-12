@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -94,12 +95,7 @@ func (h *hostsManager) resolvesToLocalhost(domain string) bool {
 		return false
 	}
 
-	for _, addr := range addrs {
-		if addr == "127.0.0.1" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(addrs, "127.0.0.1") || slices.Contains(addrs, "::1")
 }
 
 func (h *hostsManager) block(domains []string) string {
