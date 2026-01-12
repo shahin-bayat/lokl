@@ -25,8 +25,9 @@ type Process struct {
 	healthy bool
 
 	cmd    *exec.Cmd
-	logs   *lineBuffer
+	logs   *logs
 	cancel context.CancelFunc
+	exitCh chan struct{}
 	mu     sync.Mutex
 }
 
@@ -39,10 +40,14 @@ func New(name string, cfg config.Service) *Process {
 }
 
 func (p *Process) IsRunning() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.state == stateRunning
 }
 
 func (p *Process) IsHealthy() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.healthy
 }
 
@@ -63,7 +68,6 @@ func (p *Process) Start() error {
 
 	p.state = stateStarting
 
-	// Use exec to replace shell process, making signal handling cleaner
 	p.cmd = exec.Command("sh", "-c", "exec "+p.config.Command)
 	p.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
@@ -73,7 +77,7 @@ func (p *Process) Start() error {
 
 	p.cmd.Env = p.buildEnv()
 
-	p.logs = newLineBuffer(maxLogLines)
+	p.logs = newLogs(maxLogLines)
 	p.cmd.Stdout = p.logs
 	p.cmd.Stderr = p.logs
 
@@ -83,8 +87,9 @@ func (p *Process) Start() error {
 	}
 
 	p.state = stateRunning
+	p.exitCh = make(chan struct{})
 
-	// Watch for unexpected exit - if process dies while still "running", mark as failed
+	// Single goroutine that waits for process exit and signals via channel
 	go func() {
 		_ = p.cmd.Wait()
 		p.mu.Lock()
@@ -92,6 +97,7 @@ func (p *Process) Start() error {
 			p.state = stateFailed
 		}
 		p.mu.Unlock()
+		close(p.exitCh)
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -108,20 +114,23 @@ func (p *Process) Stop() error {
 		return nil
 	}
 	p.state = stateStopping
-	cmd := p.cmd
+	exitCh := p.exitCh
+	pgid := p.cmd.Process.Pid
 	if p.cancel != nil {
 		p.cancel()
 	}
 	p.mu.Unlock()
 
-	// Send SIGTERM to entire process group (negative PID)
-	pgid := cmd.Process.Pid
 	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 
-	time.AfterFunc(stopTimeout, func() {
+	// Schedule SIGKILL but cancel if process exits cleanly
+	killTimer := time.AfterFunc(stopTimeout, func() {
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 	})
-	_ = cmd.Wait()
+
+	// Wait for the exit signal from the goroutine that called Wait()
+	<-exitCh
+	killTimer.Stop()
 
 	p.mu.Lock()
 	p.state = stateStopped

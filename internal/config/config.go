@@ -18,7 +18,7 @@ type Config struct {
 
 type ProxyConfig struct {
 	Domain string `yaml:"domain"`
-	HTTPS  *bool  `yaml:"https"`
+	HTTPS  *bool  `yaml:"https"` // TODO: not yet implemented, proxy always uses HTTPS
 }
 
 type Service struct {

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"strings"
+	"sync/atomic"
 
 	"github.com/shahin-bayat/lokl/internal/config"
 )
@@ -10,7 +11,7 @@ type route struct {
 	domain  string
 	port    int
 	rewrite *rewriteConfig
-	enabled bool
+	enabled atomic.Bool
 }
 
 type rewriteConfig struct {
@@ -40,10 +41,10 @@ func newRouter(cfg *config.Config) *router {
 		}
 
 		rt := &route{
-			domain:  fqdn,
-			port:    svc.Port,
-			enabled: true,
+			domain: fqdn,
+			port:   svc.Port,
 		}
+		rt.enabled.Store(true)
 
 		if svc.Rewrite != nil {
 			rt.rewrite = &rewriteConfig{
@@ -82,7 +83,7 @@ func (r *router) domains() []string {
 func (r *router) enabledDomains() []string {
 	var domains []string
 	for domain, rt := range r.routes {
-		if rt.enabled {
+		if rt.enabled.Load() {
 			domains = append(domains, domain)
 		}
 	}
@@ -98,6 +99,6 @@ func (r *router) setEnabled(domain string, enabled bool) bool {
 	if !ok {
 		return false
 	}
-	rt.enabled = enabled
+	rt.enabled.Store(enabled)
 	return true
 }
