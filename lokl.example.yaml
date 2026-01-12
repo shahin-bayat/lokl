@@ -1,13 +1,13 @@
 # lokl.yaml - Development environment configuration
 # This example is based on a monorepo with multiple frontend apps and backend services.
 
-name: waipu                    # Project identifier (required)
-version: "1"                   # Config version for future compatibility
+name: waipu # Project identifier (required)
+version: "1" # Config version for future compatibility
 
 # Proxy configuration for HTTPS routing
 proxy:
-  domain: waipu-dev.net        # Base domain - services get subdomains like app.waipu-dev.net
-  https: true                  # Enable HTTPS with auto-generated certificates (default: true)
+  domain: waipu-dev.net # Base domain - services get subdomains like app.waipu-dev.net
+  https: true # Enable HTTPS with auto-generated certificates (default: true)
 
 # Global environment variables available to all services
 env:
@@ -17,66 +17,65 @@ env:
 services:
   # Frontend app with SPA routing
   customer-funnel:
-    path: ./apps/customer-funnel    # Working directory relative to lokl.yaml
-    command: pnpm dev               # Command to start the service
-    port: 8080                      # Port the service listens on
-    subdomain: client               # Creates https://client.waipu-dev.net
+    command: pnpm dev # Command to start the service
+    path: ./apps/customer-funnel # Working directory relative to lokl.yaml
+
+    port: 8080 # Port the service listens on
+    subdomain: client # Creates https://client.waipu-dev.net
+
     # Optional: Path rewriting (only needed for SPAs or monorepo path prefixes)
     rewrite:
       strip_prefix: customer-funnel # Strip /customer-funnel prefix from paths
-      fallback: /index.html         # SPA fallback for client-side routing
+      fallback: /index.html # SPA fallback for client-side routing
+
     env:
       VITE_API_URL: https://ccc-api.waipu-dev.net
-    depends_on:
-      - api                         # Start api before this service
-    health:
-      path: /                       # HTTP path to check
-      interval: 10s                 # How often to check
-      timeout: 3s                   # Request timeout
-      retries: 3                    # Failures before marking unhealthy
-    ready_timeout: 30s              # Max time to wait for service to be ready
-    restart: on-failure             # Restart policy: always | on-failure | never
 
-  # Internal admin tool
-  customer-care-cockpit:
-    path: ./apps/ccc
-    command: pnpm dev
-    port: 8081
-    subdomain: ccc                  # https://ccc.waipu-dev.net
-    rewrite:
-      fallback: /index.html         # SPA fallback
     depends_on:
-      - api
+      - api # Start api before this service
+
+    health:
+      path: / # HTTP path to check
+      interval: 10s # How often to check
+      timeout: 3s # Request timeout
+      retries: 3 # Failures before marking unhealthy
+
+    ready_timeout: 30s # Max time to wait for service to be ready
+    restart: on-failure # Restart policy: always | on-failure | never
 
   # API server
   api:
-    path: ./apps/api
     command: pnpm dev
+    path: ./apps/api
+
     port: 3001
-    subdomain: ccc-api              # https://ccc-api.waipu-dev.net
+    subdomain: ccc-api # https://ccc-api.waipu-dev.net
+
     env:
       DATABASE_URL: postgresql://waipu:dev@localhost:5432/waipu_dev
       REDIS_URL: redis://localhost:6379
-    health:
-      path: /health
-      interval: 10s
+
     depends_on:
       - postgres
       - redis
+
+    health:
+      path: /health
+      interval: 10s
     limits:
-      memory: 512M                  # Memory limit for the service
+      memory: 512M # Memory limit for the service
 
   # Storybook - component library docs
   storybook:
     path: ./packages/ui
     command: pnpm storybook
     port: 6006
-    subdomain: storybook            # https://storybook.waipu-dev.net
-    autostart: false                # Don't start with `lokl up` (default: true)
+    subdomain: storybook # https://storybook.waipu-dev.net
+    autostart: false # Don't start with `lokl up` (default: true)
 
   # Docker-based database
   postgres:
-    image: postgres:15              # Docker image (mutually exclusive with command)
+    image: postgres:15 # Docker image (mutually exclusive with command)
     port: 5432
     env:
       POSTGRES_USER: waipu
