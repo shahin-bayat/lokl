@@ -34,8 +34,10 @@ type ProxyManager interface {
 	IsProxyEnabled(domain string) bool
 }
 
+const eventBufferSize = 100
+
 // ProcessFactory creates a new process runner.
-type ProcessFactory func(name string, svc config.Service) ProcessRunner
+type ProcessFactory func(name string, svc config.Service, onChange func()) ProcessRunner
 
 type Supervisor struct {
 	cfg            *config.Config
@@ -43,6 +45,7 @@ type Supervisor struct {
 	processFactory ProcessFactory
 	processes      map[string]ProcessRunner
 	log            Logger
+	events         chan types.Event
 }
 
 func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager, log Logger) *Supervisor {
@@ -52,6 +55,19 @@ func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager, log Logger) *Su
 		processFactory: pf,
 		processes:      make(map[string]ProcessRunner),
 		log:            log,
+		events:         make(chan types.Event, eventBufferSize),
+	}
+}
+
+func (s *Supervisor) Subscribe() <-chan types.Event {
+	return s.events
+}
+
+func (s *Supervisor) emit(service string) {
+	select {
+	case s.events <- types.Event{Service: service}:
+	default:
+		// channel full, drop event
 	}
 }
 
@@ -114,7 +130,10 @@ func (s *Supervisor) StartService(name string) error {
 		return fmt.Errorf("docker services not yet supported")
 	}
 
-	p := s.processFactory(name, svc)
+	onChange := func() {
+		s.emit(name)
+	}
+	p := s.processFactory(name, svc, onChange)
 	if err := p.Start(); err != nil {
 		return fmt.Errorf("starting %s: %w", name, err)
 	}

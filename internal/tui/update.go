@@ -4,20 +4,27 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/shahin-bayat/lokl/internal/types"
 )
 
-const tickInterval = 200 * time.Millisecond
+const logPollInterval = 200 * time.Millisecond
 
-type tickMsg time.Time
+type eventMsg types.Event
+type logTickMsg struct{}
 
-func doTick() tea.Cmd {
-	return tea.Tick(tickInterval, func(t time.Time) tea.Msg {
-		return tickMsg(t)
+func (m Model) waitForEvent() tea.Msg {
+	return eventMsg(<-m.events)
+}
+
+func logTick() tea.Cmd {
+	return tea.Tick(logPollInterval, func(time.Time) tea.Msg {
+		return logTickMsg{}
 	})
 }
 
 func (m Model) Init() tea.Cmd {
-	return doTick()
+	return m.waitForEvent
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -30,9 +37,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
-	case tickMsg:
+	case eventMsg:
 		m.refreshServices()
-		return m, doTick()
+		return m, m.waitForEvent
+
+	case logTickMsg:
+		if m.showLogs {
+			return m, logTick()
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -77,6 +90,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "l":
 		m.showLogs = !m.showLogs
+		if m.showLogs {
+			return m, logTick()
+		}
 	}
 
 	return m, nil

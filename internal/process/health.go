@@ -33,14 +33,22 @@ func (p *Process) startHealthCheck(ctx context.Context) {
 			if p.checkHealth(timeout) {
 				failures = 0
 				p.mu.Lock()
+				prev := p.healthy
 				p.healthy = true
 				p.mu.Unlock()
+				if !prev {
+					p.onChange()
+				}
 			} else {
 				failures++
 				if failures >= retries {
 					p.mu.Lock()
+					prev := p.healthy
 					p.healthy = false
 					p.mu.Unlock()
+					if prev {
+						p.onChange()
+					}
 				}
 			}
 		}

@@ -11,11 +11,13 @@ type ServiceController interface {
 	Services() []types.ServiceInfo
 	ServiceLogs(name string) []string
 	ProjectName() string
+	Subscribe() <-chan types.Event
 }
 
 // Model is the TUI state.
 type Model struct {
 	controller  ServiceController
+	events      <-chan types.Event
 	services    []types.ServiceInfo
 	selectedIdx int
 	showLogs    bool
@@ -27,6 +29,7 @@ type Model struct {
 func newModel(ctrl ServiceController) Model {
 	m := Model{
 		controller: ctrl,
+		events:     ctrl.Subscribe(),
 	}
 	m.refreshServices()
 	return m

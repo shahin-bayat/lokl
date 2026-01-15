@@ -47,12 +47,12 @@ var upCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 
-		processRunner := func(name string, svc config.Service) supervisor.ProcessRunner {
-			return process.New(name, svc)
+		processFactory := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
+			return process.New(name, svc, onChange)
 		}
 
 		log := logger.New(os.Stdout)
-		sup := supervisor.New(cfg, processRunner, proxy.New(cfg), log)
+		sup := supervisor.New(cfg, processFactory, proxy.New(cfg), log)
 
 		if err := sup.Start(); err != nil {
 			return err
