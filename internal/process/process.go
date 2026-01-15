@@ -19,10 +19,11 @@ const (
 )
 
 type Process struct {
-	name    string
-	config  config.Service
-	state   state
-	healthy bool
+	name     string
+	config   config.Service
+	state    state
+	healthy  bool
+	onChange func()
 
 	cmd    *exec.Cmd
 	logs   *logs
@@ -31,11 +32,12 @@ type Process struct {
 	mu     sync.Mutex
 }
 
-func New(name string, cfg config.Service) *Process {
+func New(name string, cfg config.Service, onChange func()) *Process {
 	return &Process{
-		name:   name,
-		config: cfg,
-		state:  stateStopped,
+		name:     name,
+		config:   cfg,
+		state:    stateStopped,
+		onChange: onChange,
 	}
 }
 
@@ -88,6 +90,7 @@ func (p *Process) Start() error {
 
 	p.state = stateRunning
 	p.exitCh = make(chan struct{})
+	p.onChange()
 
 	// Single goroutine that waits for process exit and signals via channel
 	go func() {
@@ -97,6 +100,7 @@ func (p *Process) Start() error {
 			p.state = stateFailed
 		}
 		p.mu.Unlock()
+		p.onChange()
 		close(p.exitCh)
 	}()
 
@@ -135,6 +139,7 @@ func (p *Process) Stop() error {
 	p.mu.Lock()
 	p.state = stateStopped
 	p.mu.Unlock()
+	p.onChange()
 
 	return nil
 }
