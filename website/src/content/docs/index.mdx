@@ -1,0 +1,44 @@
+---
+title: lokl
+description: Local development environment orchestrator
+template: splash
+hero:
+  tagline: One command to rule them all. Define your entire dev setup in a single file.
+  actions:
+    - text: Get Started
+      link: /lokl/introduction/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/shahin-bayat/lokl
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why lokl?
+
+New developer joins your team. Instead of spending a day setting up their environment:
+
+```bash
+lokl up
+```
+
+That's it. Frontend, backend, databases, HTTPS routing — all running.
+
+## Features
+
+<CardGrid>
+  <Card title="Single Config File" icon="document">
+    Define all services in one `lokl.yaml` file
+  </Card>
+  <Card title="Automatic HTTPS" icon="approve-check">
+    Generated certificates for custom domains like `app.myproject.dev`
+  </Card>
+  <Card title="Process Management" icon="setting">
+    Health checks, dependency ordering, auto-restart
+  </Card>
+  <Card title="Interactive TUI" icon="laptop">
+    Start/stop services, view logs, toggle proxy
+  </Card>
+</CardGrid>
