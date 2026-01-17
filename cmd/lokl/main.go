@@ -4,26 +4,16 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
-	"github.com/shahin-bayat/lokl/internal/config"
-	"github.com/shahin-bayat/lokl/internal/logger"
-	"github.com/shahin-bayat/lokl/internal/process"
-	"github.com/shahin-bayat/lokl/internal/proxy"
-	"github.com/shahin-bayat/lokl/internal/supervisor"
-	"github.com/shahin-bayat/lokl/internal/tui"
 	"github.com/shahin-bayat/lokl/internal/version"
 )
 
 const defaultConfigFile = "lokl.yaml"
 
-var (
-	configFile string
-	detach     bool
-)
+var configFile string
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
@@ -36,42 +26,6 @@ var rootCmd = &cobra.Command{
 	Short:   "Local development environment orchestrator",
 	Long:    "lokl - Define and run your local development environment with a single command.",
 	Version: version.Version,
-}
-
-var upCmd = &cobra.Command{
-	Use:   "up [services...]",
-	Short: "Start the development environment",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load(configFile)
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
-
-		processFactory := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
-			return process.New(name, svc, onChange)
-		}
-
-		log := logger.New(os.Stdout)
-		sup := supervisor.New(cfg, processFactory, proxy.New(cfg), log)
-
-		if err := sup.Start(); err != nil {
-			return err
-		}
-
-		if detach {
-			log.Infof("\nPress Ctrl+C to stop\n")
-			waitForSignal()
-			log.Infof("\nShutting down...\n")
-		} else {
-			app := tui.New(sup)
-			if err := app.Run(); err != nil {
-				_ = sup.Stop()
-				return err
-			}
-		}
-
-		return sup.Stop()
-	},
 }
 
 var downCmd = &cobra.Command{
@@ -93,68 +47,9 @@ var statusCmd = &cobra.Command{
 	},
 }
 
-var dnsCmd = &cobra.Command{
-	Use:   "dns",
-	Short: "Manage DNS entries",
-}
-
-var dnsSetupCmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Add DNS entries to /etc/hosts",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load(configFile)
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
-
-		p := proxy.New(cfg)
-		domains := p.Domains()
-
-		if len(domains) == 0 {
-			fmt.Println("No domains configured")
-			return nil
-		}
-
-		if err := p.SetupDNS(); err != nil {
-			return fmt.Errorf("adding DNS entries: %w", err)
-		}
-
-		fmt.Printf("✓ Added %d entries to /etc/hosts\n", len(domains))
-		return nil
-	},
-}
-
-var dnsRemoveCmd = &cobra.Command{
-	Use:   "remove",
-	Short: "Remove DNS entries from /etc/hosts",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load(configFile)
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
-
-		p := proxy.New(cfg)
-
-		if err := p.RemoveDNS(); err != nil {
-			return fmt.Errorf("removing DNS entries: %w", err)
-		}
-
-		fmt.Println("✓ Removed DNS entries from /etc/hosts")
-		fmt.Println("\nTo flush DNS cache:")
-		if runtime.GOOS == "darwin" {
-			fmt.Println("  sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder")
-		} else {
-			fmt.Println("  sudo systemd-resolve --flush-caches")
-		}
-		return nil
-	},
-}
-
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfigFile, "config file path")
-	upCmd.Flags().BoolVarP(&detach, "detach", "d", false, "run without TUI")
-	dnsCmd.AddCommand(dnsSetupCmd, dnsRemoveCmd)
-	rootCmd.AddCommand(upCmd, downCmd, statusCmd, dnsCmd)
+	rootCmd.AddCommand(upCmd, downCmd, statusCmd, dnsCmd, initCmd)
 }
 
 func waitForSignal() {
