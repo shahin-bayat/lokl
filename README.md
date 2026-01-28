@@ -36,12 +36,26 @@ That's it. Frontend, backend, databases, HTTPS routing — all running.
 
 🔍 **Project detection** — `lokl init` scans your project and generates config
 
+## Installation
+
+**Homebrew (macOS/Linux):**
+```bash
+brew install shahin-bayat/tap/lokl
+```
+
+**One-liner:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/shahin-bayat/lokl/main/install.sh | bash
+```
+
+**Go install:**
+```bash
+go install github.com/shahin-bayat/lokl/cmd/lokl@latest
+```
+
 ## Quick Start
 
 ```bash
-# Install (macOS/Linux)
-go install github.com/shahin-bayat/lokl/cmd/lokl@latest
-
 # Initialize config from your project
 lokl init
 
