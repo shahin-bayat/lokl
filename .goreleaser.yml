@@ -39,3 +39,13 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^chore:"
+
+brews:
+  - repository:
+      owner: shahin-bayat
+      name: homebrew-tap
+    homepage: "https://github.com/shahin-bayat/lokl"
+    description: "Local development environment orchestrator"
+    license: "MIT"
+    install: |
+      bin.install "lokl"
