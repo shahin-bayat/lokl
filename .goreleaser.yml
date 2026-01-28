@@ -41,6 +41,7 @@ brews:
   - repository:
       owner: shahin-bayat
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: "https://github.com/shahin-bayat/lokl"
     description: "Local development environment orchestrator"
     license: "MIT"
