@@ -36,7 +36,16 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	log := logger.New(os.Stdout)
-	sup := supervisor.New(cfg, processFactory, proxy.New(cfg), log)
+	prx := proxy.New(cfg)
+
+	if cfg.Proxy.Domain != "" {
+		if unresolved := prx.UnresolvedDomains(); len(unresolved) > 0 {
+			log.Infof("⚠ DNS not configured for %s\n", cfg.Proxy.Domain)
+			log.Infof("  Run: sudo lokl dns setup\n\n")
+		}
+	}
+
+	sup := supervisor.New(cfg, processFactory, prx, log)
 
 	if err := sup.Start(); err != nil {
 		return err

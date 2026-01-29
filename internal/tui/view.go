@@ -133,10 +133,14 @@ func (m Model) renderLogs() string {
 		return b.String()
 	}
 
-	// Show last 10 lines
+	maxLogLines := m.height / 2
+	if maxLogLines < 3 {
+		maxLogLines = 3
+	}
+
 	start := 0
-	if len(logs) > 10 {
-		start = len(logs) - 10
+	if len(logs) > maxLogLines {
+		start = len(logs) - maxLogLines
 	}
 	for _, line := range logs[start:] {
 		b.WriteString("  ")

@@ -21,9 +21,10 @@ var initCmd = &cobra.Command{
 }
 
 type serviceConfig struct {
-	command string
-	port    int
-	path    string
+	command   string
+	port      int
+	path      string
+	subdomain string
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -147,9 +148,18 @@ func configureService(svc inspect.Service, cwd string, scanner *bufio.Scanner) (
 		return serviceConfig{}, false
 	}
 
+	subdomain := svc.Name
+	fmt.Printf("  Subdomain [%s]: ", subdomain)
+	if scanner.Scan() {
+		if text := strings.TrimSpace(scanner.Text()); text != "" {
+			subdomain = text
+		}
+	}
+
 	sc := serviceConfig{
-		command: svc.Command + " run " + selectedScript,
-		port:    port,
+		command:   svc.Command + " run " + selectedScript,
+		port:      port,
+		subdomain: subdomain,
 	}
 	if svc.Path != "." {
 		sc.path = svc.Path
@@ -162,8 +172,9 @@ func saveConfig(projectName, domain string, services map[string]serviceConfig) e
 	svcMap := make(map[string]map[string]any)
 	for name, svc := range services {
 		m := map[string]any{
-			"command": svc.command,
-			"port":    svc.port,
+			"command":   svc.command,
+			"port":      svc.port,
+			"subdomain": svc.subdomain,
 		}
 		if svc.path != "" {
 			m["path"] = svc.path
