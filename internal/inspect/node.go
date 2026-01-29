@@ -15,11 +15,6 @@ type nodeInspector struct{}
 func (n *nodeInspector) name() string { return "node" }
 
 func (n *nodeInspector) inspect(root string) ([]Service, error) {
-	// Entry check: is this a node project?
-	if _, err := os.Stat(filepath.Join(root, "package.json")); err != nil {
-		return nil, nil
-	}
-
 	pm := detectPackageManager(root)
 	var services []Service
 
