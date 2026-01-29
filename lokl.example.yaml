@@ -1,12 +1,12 @@
 # lokl.yaml - Development environment configuration
 # This example is based on a monorepo with multiple frontend apps and backend services.
 
-name: waipu # Project identifier (required)
+name: myproject # Project identifier (required)
 version: "1" # Config version for future compatibility
 
 # Proxy configuration for HTTPS routing
 proxy:
-  domain: waipu-dev.net # Base domain - services get subdomains like app.waipu-dev.net
+  domain: myproject.dev # Base domain - services get subdomains like app.myproject.dev
   https: true # Enable HTTPS with auto-generated certificates (default: true)
 
 # Global environment variables available to all services
@@ -16,20 +16,20 @@ env:
 
 services:
   # Frontend app with SPA routing
-  customer-funnel:
+  web:
     command: pnpm dev # Command to start the service
-    path: ./apps/customer-funnel # Working directory relative to lokl.yaml
+    path: ./apps/web # Working directory relative to lokl.yaml
 
     port: 8080 # Port the service listens on
-    subdomain: client # Creates https://client.waipu-dev.net
+    subdomain: app # Creates https://app.myproject.dev
 
     # Optional: Path rewriting (only needed for SPAs or monorepo path prefixes)
     rewrite:
-      strip_prefix: customer-funnel # Strip /customer-funnel prefix from paths
+      strip_prefix: web # Strip /web prefix from paths
       fallback: /index.html # SPA fallback for client-side routing
 
     env:
-      VITE_API_URL: https://ccc-api.waipu-dev.net
+      VITE_API_URL: https://api.myproject.dev
 
     depends_on:
       - api # Start api before this service
@@ -49,10 +49,10 @@ services:
     path: ./apps/api
 
     port: 3001
-    subdomain: ccc-api # https://ccc-api.waipu-dev.net
+    subdomain: api # https://api.myproject.dev
 
     env:
-      DATABASE_URL: postgresql://waipu:dev@localhost:5432/waipu_dev
+      DATABASE_URL: postgresql://app:dev@localhost:5432/myproject_dev
       REDIS_URL: redis://localhost:6379
 
     depends_on:
@@ -70,7 +70,7 @@ services:
     path: ./packages/ui
     command: pnpm storybook
     port: 6006
-    subdomain: storybook # https://storybook.waipu-dev.net
+    subdomain: storybook # https://storybook.myproject.dev
     autostart: false # Don't start with `lokl up` (default: true)
 
   # Docker-based database
@@ -78,9 +78,9 @@ services:
     image: postgres:15 # Docker image (mutually exclusive with command)
     port: 5432
     env:
-      POSTGRES_USER: waipu
+      POSTGRES_USER: app
       POSTGRES_PASSWORD: dev
-      POSTGRES_DB: waipu_dev
+      POSTGRES_DB: myproject_dev
     volumes:
       - ./.lokl/postgres:/var/lib/postgresql/data
 
