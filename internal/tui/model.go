@@ -21,6 +21,7 @@ type Model struct {
 	services    []types.ServiceInfo
 	selectedIdx int
 	showLogs    bool
+	showHelp    bool
 	width       int
 	height      int
 	quitting    bool

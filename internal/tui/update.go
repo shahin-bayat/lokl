@@ -52,10 +52,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.showHelp {
+		switch msg.String() {
+		case "?", "esc", "q":
+			m.showHelp = false
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
+
+	case "?":
+		m.showHelp = true
+		return m, nil
 
 	case "j", "down":
 		if m.selectedIdx < len(m.services)-1 {

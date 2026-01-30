@@ -14,6 +14,10 @@ func (m Model) View() string {
 		return "Shutting down...\n"
 	}
 
+	if m.showHelp {
+		return m.renderHelp()
+	}
+
 	var b strings.Builder
 
 	b.WriteString(m.renderHeader())
@@ -159,8 +163,53 @@ func (m Model) renderStatusBar() string {
 		styleKeyHint.Render("r") + " restart",
 		styleKeyHint.Render("p") + " toggle",
 		styleKeyHint.Render("l") + " logs",
+		styleKeyHint.Render("?") + " help",
 		styleKeyHint.Render("q") + " quit",
 	}
 
 	return styleStatusBar.Render(strings.Join(keys, "  "))
+}
+
+func (m Model) renderHelp() string {
+	title := styleHeader.Render("Keyboard Shortcuts")
+
+	bindings := []struct {
+		key  string
+		desc string
+	}{
+		{"j / ↓", "Move selection down"},
+		{"k / ↑", "Move selection up"},
+		{"s", "Start selected service"},
+		{"x", "Stop selected service"},
+		{"r", "Restart selected service"},
+		{"p", "Toggle proxy (local/remote)"},
+		{"l", "Toggle log view"},
+		{"?", "Show/hide this help"},
+		{"q", "Quit lokl"},
+	}
+
+	var b strings.Builder
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	for _, bind := range bindings {
+		key := styleKeyHint.Render(fmt.Sprintf("%-8s", bind.key))
+		b.WriteString(fmt.Sprintf("  %s %s\n", key, bind.desc))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(styleDomain.Render("Press ? or esc to close"))
+
+	content := b.String()
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorPrimary).
+		Padding(1, 2)
+
+	box := boxStyle.Render(content)
+
+	return lipgloss.Place(m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		box)
 }
