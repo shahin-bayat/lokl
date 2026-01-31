@@ -4,6 +4,7 @@ package process
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"sync"
@@ -66,6 +67,12 @@ func (p *Process) Start() error {
 
 	if p.state != stateStopped && p.state != stateFailed {
 		return fmt.Errorf("process %s: cannot start from state %s", p.name, p.state)
+	}
+
+	if p.config.Port > 0 {
+		if err := checkPortFree(p.config.Port); err != nil {
+			return fmt.Errorf("process %s: %w", p.name, err)
+		}
 	}
 
 	p.state = stateStarting
@@ -150,4 +157,13 @@ func (p *Process) buildEnv() []string {
 		env = append(env, k+"="+v)
 	}
 	return env
+}
+
+func checkPortFree(port int) error {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return fmt.Errorf("port %d already in use", port)
+	}
+	_ = ln.Close()
+	return nil
 }

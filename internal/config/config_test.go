@@ -140,6 +140,17 @@ func TestValidate(t *testing.T) {
 			wantErr: "invalid health.interval",
 		},
 		{
+			name: "duplicate ports",
+			cfg: Config{
+				Name: "test",
+				Services: map[string]Service{
+					"a": {Command: "x", Port: 3000},
+					"b": {Command: "y", Port: 3000},
+				},
+			},
+			wantErr: "both use port 3000",
+		},
+		{
 			name: "valid config",
 			cfg: Config{
 				Name:     "test",
