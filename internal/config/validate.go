@@ -20,12 +20,30 @@ func Validate(cfg *Config) error {
 		}
 	}
 
+	if err := checkDuplicatePorts(cfg.Services); err != nil {
+		return err
+	}
+
 	for name, svc := range cfg.Services {
 		if err := validateService(name, &svc, cfg.Services); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+func checkDuplicatePorts(services map[string]Service) error {
+	portToService := make(map[int]string)
+	for name, svc := range services {
+		if svc.Port == 0 {
+			continue
+		}
+		if existing, exists := portToService[svc.Port]; exists {
+			return fmt.Errorf("services %q and %q both use port %d", existing, name, svc.Port)
+		}
+		portToService[svc.Port] = name
+	}
 	return nil
 }
 
