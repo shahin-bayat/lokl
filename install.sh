@@ -72,6 +72,46 @@ else
     error "Binary not found in archive"
 fi
 
+# Install shell completions
+install_completions() {
+    local shell_name="$1"
+    local lokl_bin="$INSTALL_DIR/$BINARY_NAME"
+
+    case "$shell_name" in
+        zsh)
+            local comp_dir="${ZDOTDIR:-$HOME}/.zsh/completions"
+            mkdir -p "$comp_dir"
+            "$lokl_bin" completion zsh > "$comp_dir/_lokl"
+            # Ensure fpath includes the directory
+            if ! grep -q 'fpath.*\.zsh/completions' ~/.zshrc 2>/dev/null; then
+                echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+                echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+            fi
+            ;;
+        bash)
+            local comp_dir="$HOME/.local/share/bash-completion/completions"
+            mkdir -p "$comp_dir"
+            "$lokl_bin" completion bash > "$comp_dir/lokl"
+            ;;
+        fish)
+            local comp_dir="$HOME/.config/fish/completions"
+            mkdir -p "$comp_dir"
+            "$lokl_bin" completion fish > "$comp_dir/lokl.fish"
+            ;;
+    esac
+}
+
+# Detect current shell and install completions
+CURRENT_SHELL=$(basename "$SHELL")
+if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+    case "$CURRENT_SHELL" in
+        zsh|bash|fish)
+            install_completions "$CURRENT_SHELL"
+            info "Shell completions installed for $CURRENT_SHELL"
+            ;;
+    esac
+fi
+
 # Verify
 if command -v lokl &>/dev/null; then
     info "lokl $VERSION installed successfully to $INSTALL_DIR"
@@ -79,4 +119,8 @@ if command -v lokl &>/dev/null; then
 else
     warn "lokl installed to $INSTALL_DIR"
     warn "Add $INSTALL_DIR to your PATH to use it"
+fi
+
+if [ "$CURRENT_SHELL" = "zsh" ]; then
+    info "Restart your shell or run: source ~/.zshrc"
 fi
