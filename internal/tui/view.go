@@ -85,13 +85,15 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
 
 	var domain string
 	if svc.Domain == "" {
-		domain = styleDomain.Render(fmt.Sprintf("%-36s", "-"))
-	} else if svc.ProxyEnabled {
-		url := fmt.Sprintf("https://%s", svc.Domain)
-		domain = "  " + styleLink.Render(url)
+		domain = "  " + styleDomain.Render(fmt.Sprintf("%-30s", "-"))
 	} else {
 		url := fmt.Sprintf("https://%s", svc.Domain)
-		domain = styleFailed.Render("↗") + " " + styleDomain.Render(url)
+		paddedURL := fmt.Sprintf("%-30s", url)
+		if svc.ProxyEnabled {
+			domain = "  " + styleLink.Render(paddedURL)
+		} else {
+			domain = styleFailed.Render("↗") + " " + styleDomain.Render(paddedURL)
+		}
 	}
 
 	port := fmt.Sprintf(":%d", svc.Port)
