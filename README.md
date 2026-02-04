@@ -6,9 +6,12 @@
 
 Define your entire local dev environment in a single file. Start everything with `lokl up`.
 
+[![Build](https://github.com/shahin-bayat/lokl/actions/workflows/ci.yml/badge.svg)](https://github.com/shahin-bayat/lokl/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-lokl-purple)](https://shahin-bayat.github.io/lokl/)
+
+<img src="assets/demo.gif" alt="lokl demo" width="700">
 
 </div>
 

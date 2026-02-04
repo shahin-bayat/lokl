@@ -31,6 +31,8 @@ func newModel(ctrl ServiceController) Model {
 	m := Model{
 		controller: ctrl,
 		events:     ctrl.Subscribe(),
+		width:      80,
+		height:     24,
 	}
 	m.refreshServices()
 	return m
