@@ -87,7 +87,7 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
 	if svc.Domain == "" {
 		domain = "  " + styleDomain.Render(fmt.Sprintf("%-30s", "-"))
 	} else {
-		url := fmt.Sprintf("https://%s", svc.Domain)
+		url := fmt.Sprintf("https://%s%s", svc.Domain, svc.PathPrefix)
 		paddedURL := fmt.Sprintf("%-30s", url)
 		if svc.ProxyEnabled {
 			domain = "  " + styleLink.Render(paddedURL)

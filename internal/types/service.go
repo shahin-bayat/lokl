@@ -4,6 +4,7 @@ package types
 type ServiceInfo struct {
 	Name         string
 	Domain       string
+	PathPrefix   string
 	Port         int
 	Running      bool
 	Healthy      bool
