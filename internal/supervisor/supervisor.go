@@ -229,6 +229,9 @@ func (s *Supervisor) Services() []types.ServiceInfo {
 		if domain := s.serviceDomain(svc); domain != "" {
 			item.Domain = domain
 			item.ProxyEnabled = s.proxyManager.IsProxyEnabled(domain)
+			if svc.Rewrite != nil && svc.Rewrite.StripPrefix != "" {
+				item.PathPrefix = "/" + svc.Rewrite.StripPrefix
+			}
 		}
 
 		if p, ok := s.processes[name]; ok {
