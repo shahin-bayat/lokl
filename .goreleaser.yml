@@ -5,11 +5,6 @@ project_name: lokl
 before:
   hooks:
     - go mod tidy
-    - go build -o lokl ./cmd/lokl
-    - mkdir -p completions
-    - ./lokl completion bash > completions/lokl.bash
-    - ./lokl completion zsh > completions/_lokl
-    - ./lokl completion fish > completions/lokl.fish
 
 builds:
   - main: ./cmd/lokl
@@ -30,8 +25,6 @@ archives:
   - formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files:
-      - completions/*
 
 checksum:
   name_template: "checksums.txt"
@@ -54,6 +47,4 @@ brews:
     license: "MIT"
     install: |
       bin.install "lokl"
-      bash_completion.install "completions/lokl.bash" => "lokl"
-      zsh_completion.install "completions/_lokl"
-      fish_completion.install "completions/lokl.fish"
+      generate_completions_from_executable(bin/"lokl", "completion")
