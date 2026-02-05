@@ -30,6 +30,8 @@ archives:
   - formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - completions/*
 
 checksum:
   name_template: "checksums.txt"
@@ -55,5 +57,3 @@ brews:
       bash_completion.install "completions/lokl.bash" => "lokl"
       zsh_completion.install "completions/_lokl"
       fish_completion.install "completions/lokl.fish"
-    extra_files:
-      - glob: ./completions/*
