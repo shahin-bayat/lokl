@@ -140,7 +140,7 @@ func TestContainerStartPullsImage(t *testing.T) {
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	defer c.Stop()
+	defer func() { _ = c.Stop() }()
 
 	if !pulled {
 		t.Error("expected image pull when not present locally")
@@ -167,7 +167,7 @@ func TestContainerStartCleansStaleContainer(t *testing.T) {
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	defer c.Stop()
+	defer func() { _ = c.Stop() }()
 
 	if len(stoppedIDs) == 0 || stoppedIDs[0] != "stale-id" {
 		t.Errorf("expected stale container stopped first, got %v", stoppedIDs)
@@ -198,7 +198,7 @@ func TestContainerStartAlreadyRunning(t *testing.T) {
 	if err := c.Start(); err != nil {
 		t.Fatalf("first start: %v", err)
 	}
-	defer c.Stop()
+	defer func() { _ = c.Stop() }()
 
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from second start")

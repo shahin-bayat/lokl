@@ -51,7 +51,7 @@ func (c *Client) PullImage(ctx context.Context, imageName string, onProgress fun
 	if err != nil {
 		return fmt.Errorf("pulling image %s: %w", imageName, err)
 	}
-	defer resp.Close()
+	defer func() { _ = resp.Close() }()
 
 	if onProgress != nil {
 		buf := make([]byte, 4096)

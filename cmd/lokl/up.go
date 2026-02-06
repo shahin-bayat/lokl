@@ -40,7 +40,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("docker required but unavailable: %w", err)
 			}
-			defer dockerClient.Close()
+			defer func() { _ = dockerClient.Close() }()
 			break
 		}
 	}

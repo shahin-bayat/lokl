@@ -174,7 +174,7 @@ func (c *Container) streamLogs(ctx context.Context, containerID string) {
 		c.logf("log stream error: %v", err)
 		return
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	buf := make([]byte, 4096)
 	for {
