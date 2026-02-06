@@ -76,7 +76,9 @@ services:
   # Docker-based database
   postgres:
     image: postgres:15 # Docker image (mutually exclusive with command)
-    port: 5432
+    ports:
+      - "5432:5432" # host:container port mapping
+    port: 5432 # Host port used for proxy routing and health checks
     env:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: dev
@@ -87,4 +89,6 @@ services:
   # Docker-based cache
   redis:
     image: redis:7-alpine
+    ports:
+      - "6379:6379"
     port: 6379
