@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -35,14 +37,31 @@ func Validate(cfg *Config) error {
 
 func checkDuplicatePorts(services map[string]Service) error {
 	portToService := make(map[int]string)
+
+	register := func(name string, port int) error {
+		if port == 0 {
+			return nil
+		}
+		if existing, exists := portToService[port]; exists && existing != name {
+			return fmt.Errorf("services %q and %q both use port %d", existing, name, port)
+		}
+		portToService[port] = name
+		return nil
+	}
+
 	for name, svc := range services {
-		if svc.Port == 0 {
-			continue
+		if err := register(name, svc.Port); err != nil {
+			return err
 		}
-		if existing, exists := portToService[svc.Port]; exists {
-			return fmt.Errorf("services %q and %q both use port %d", existing, name, svc.Port)
+		for _, raw := range svc.Ports {
+			host, _, err := parsePortMapping(raw)
+			if err != nil {
+				continue // validated later in validateDockerService
+			}
+			if err := register(name, host); err != nil {
+				return err
+			}
 		}
-		portToService[svc.Port] = name
 	}
 	return nil
 }
@@ -84,6 +103,12 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		}
 	}
 
+	if hasImage {
+		if err := validateDockerService(name, svc); err != nil {
+			return err
+		}
+	}
+
 	if svc.Restart != "" {
 		switch svc.Restart {
 		case restartAlways, restartOnFailure, restartNever:
@@ -92,6 +117,73 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		}
 	}
 
+	return nil
+}
+
+func validateDockerService(name string, svc *Service) error {
+	for _, raw := range svc.Ports {
+		host, container, err := parsePortMapping(raw)
+		if err != nil {
+			return fmt.Errorf("service %q: invalid port mapping %q: %w", name, raw, err)
+		}
+		if err := validatePortNumber(host); err != nil {
+			return fmt.Errorf("service %q: port mapping %q: host %w", name, raw, err)
+		}
+		if err := validatePortNumber(container); err != nil {
+			return fmt.Errorf("service %q: port mapping %q: container %w", name, raw, err)
+		}
+	}
+
+	if svc.Port > 0 && len(svc.Ports) > 0 {
+		found := false
+		for _, raw := range svc.Ports {
+			host, _, err := parsePortMapping(raw)
+			if err != nil {
+				continue
+			}
+			if host == svc.Port {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("service %q: port %d is not mapped in ports", name, svc.Port)
+		}
+	}
+
+	for _, raw := range svc.Volumes {
+		parts := strings.SplitN(raw, ":", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return fmt.Errorf("service %q: invalid volume %q: expected host:container format", name, raw)
+		}
+		if !strings.HasPrefix(parts[1], "/") {
+			return fmt.Errorf("service %q: invalid volume %q: container path must be absolute", name, raw)
+		}
+	}
+
+	return nil
+}
+
+func parsePortMapping(s string) (host, container int, err error) {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("expected host:container format")
+	}
+	host, err = strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid host port: %w", err)
+	}
+	container, err = strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid container port: %w", err)
+	}
+	return host, container, nil
+}
+
+func validatePortNumber(port int) error {
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port %d out of range (1-65535)", port)
+	}
 	return nil
 }
 

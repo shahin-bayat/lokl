@@ -126,10 +126,6 @@ func (s *Supervisor) StartService(name string) error {
 		return nil // already running, not an error
 	}
 
-	if svc.Image != "" {
-		return fmt.Errorf("docker services not yet supported")
-	}
-
 	onChange := func() {
 		s.emit(name)
 	}

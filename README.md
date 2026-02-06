@@ -106,6 +106,7 @@ Then:
 
 - macOS or Linux
 - Go 1.23+ (for installation from source)
+- Docker (for container-based services)
 
 ## License
 

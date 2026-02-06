@@ -39,6 +39,8 @@ services:
     image: postgres:16
     ports:
       - "5432:5432"
+    port: 5432
+    subdomain: db
     env:
       POSTGRES_PASSWORD: secret
     volumes:
@@ -51,8 +53,20 @@ services:
 |-------|------|-------------|
 | `image` | string | Docker image |
 | `ports` | list | Port mappings (`host:container`) |
+| `port` | int | Host port for proxy routing and health checks |
 | `env` | map | Environment variables |
-| `volumes` | list | Volume mounts |
+| `volumes` | list | Volume mounts (`host:container`) |
+| `subdomain` | string | Subdomain for proxy routing |
+| `depends_on` | list | Services to start first |
+| `health` | object | Health check configuration (see below) |
+| `autostart` | bool | Start automatically (default: true) |
+| `restart` | string | Restart policy: `no`, `always`, `on-failure` |
+
+:::note
+- When `port` is set with `ports`, the port value must appear as a host port in one of the mappings.
+- Volume container paths must be absolute (e.g., `/var/lib/data`, not `data`).
+- Docker must be running to use container-based services.
+:::
 
 ## Dependencies
 

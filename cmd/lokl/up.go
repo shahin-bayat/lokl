@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/docker"
 	"github.com/shahin-bayat/lokl/internal/logger"
 	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
@@ -31,7 +33,22 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	var dockerClient *docker.Client
+	for _, svc := range cfg.Services {
+		if svc.Image != "" {
+			dockerClient, err = docker.NewClient()
+			if err != nil {
+				return fmt.Errorf("docker required but unavailable: %w", err)
+			}
+			defer func() { _ = dockerClient.Close() }()
+			break
+		}
+	}
+
 	processFactory := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
+		if svc.Image != "" {
+			return docker.NewContainer(name, svc, dockerClient, onChange)
+		}
 		return process.New(name, svc, onChange)
 	}
 
