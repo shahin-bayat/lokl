@@ -134,8 +134,8 @@ func (c *Container) Start() error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 
-	go c.streamLogs(runCtx)
-	go c.watchContainer(runCtx)
+	go c.streamLogs(runCtx, id)
+	go c.watchContainer(runCtx, id)
 	go c.startHealthCheck(runCtx)
 
 	return nil
@@ -168,8 +168,8 @@ func (c *Container) Stop() error {
 	return nil
 }
 
-func (c *Container) streamLogs(ctx context.Context) {
-	rc, err := c.api.StreamLogs(ctx, c.containerID, true)
+func (c *Container) streamLogs(ctx context.Context, containerID string) {
+	rc, err := c.api.StreamLogs(ctx, containerID, true)
 	if err != nil {
 		c.logf("log stream error: %v", err)
 		return
@@ -198,7 +198,7 @@ func (c *Container) streamLogs(ctx context.Context) {
 
 // Polls Docker to detect container crashes. Unlike processes (where cmd.Wait()
 // gives instant notification), we don't own the container process so we poll.
-func (c *Container) watchContainer(ctx context.Context) {
+func (c *Container) watchContainer(ctx context.Context, containerID string) {
 	ticker := time.NewTicker(watchInterval)
 	defer ticker.Stop()
 
@@ -207,7 +207,7 @@ func (c *Container) watchContainer(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			running, err := c.api.IsContainerRunning(ctx, c.containerID)
+			running, err := c.api.IsContainerRunning(ctx, containerID)
 			if err != nil || !running {
 				c.mu.Lock()
 				if c.state == stateRunning {
