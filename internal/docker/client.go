@@ -87,6 +87,20 @@ func (c *Client) ImageExists(ctx context.Context, imageName string) (bool, error
 	return true, nil
 }
 
+func (c *Client) FindContainerByName(ctx context.Context, name string) (string, error) {
+	resp, err := c.api.ContainerList(ctx, client.ContainerListOptions{
+		All:     true,
+		Filters: make(client.Filters).Add("name", "^"+name+"$"),
+	})
+	if err != nil {
+		return "", fmt.Errorf("listing containers: %w", err)
+	}
+	if len(resp.Items) == 0 {
+		return "", nil
+	}
+	return resp.Items[0].ID, nil
+}
+
 func (c *Client) CreateContainer(ctx context.Context, cfg ContainerConfig) (string, error) {
 	env := make([]string, 0, len(cfg.Env))
 	for k, v := range cfg.Env {

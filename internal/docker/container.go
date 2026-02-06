@@ -97,8 +97,15 @@ func (c *Container) Start() error {
 		return fmt.Errorf("container %s: %w", c.name, err)
 	}
 
+	containerName := fmt.Sprintf("lokl-%s", c.name)
+
+	if staleID, _ := c.api.FindContainerByName(ctx, containerName); staleID != "" {
+		_ = c.api.StopContainer(ctx, staleID, stopTimeout)
+		_ = c.api.RemoveContainer(ctx, staleID)
+	}
+
 	cfg := ContainerConfig{
-		Name:    fmt.Sprintf("lokl-%s", c.name),
+		Name:    containerName,
 		Image:   c.config.Image,
 		Env:     c.config.Env,
 		Ports:   ports,

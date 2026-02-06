@@ -25,6 +25,7 @@ type DockerAPI interface {
 	PullImage(ctx context.Context, image string, onProgress func(string)) error
 	ImageExists(ctx context.Context, image string) (bool, error)
 
+	FindContainerByName(ctx context.Context, name string) (string, error)
 	CreateContainer(ctx context.Context, cfg ContainerConfig) (string, error)
 	StartContainer(ctx context.Context, id string) error
 	StopContainer(ctx context.Context, id string, timeoutSeconds int) error
