@@ -151,6 +151,65 @@ func TestValidate(t *testing.T) {
 			wantErr: "both use port 3000",
 		},
 		{
+			name: "docker: invalid port format",
+			cfg: Config{
+				Name:     "test",
+				Services: map[string]Service{"a": {Image: "nginx", Ports: []string{"bad"}}},
+			},
+			wantErr: "invalid port mapping",
+		},
+		{
+			name: "docker: port out of range",
+			cfg: Config{
+				Name:     "test",
+				Services: map[string]Service{"a": {Image: "nginx", Ports: []string{"99999:80"}}},
+			},
+			wantErr: "out of range",
+		},
+		{
+			name: "docker: invalid volume format",
+			cfg: Config{
+				Name:     "test",
+				Services: map[string]Service{"a": {Image: "nginx", Volumes: []string{"bad"}}},
+			},
+			wantErr: "invalid volume",
+		},
+		{
+			name: "docker: volume relative container path",
+			cfg: Config{
+				Name:     "test",
+				Services: map[string]Service{"a": {Image: "nginx", Volumes: []string{"./data:relative"}}},
+			},
+			wantErr: "container path must be absolute",
+		},
+		{
+			name: "docker: port not in ports mapping",
+			cfg: Config{
+				Name:     "test",
+				Services: map[string]Service{"a": {Image: "nginx", Port: 8080, Ports: []string{"3000:80"}}},
+			},
+			wantErr: "port 8080 is not mapped",
+		},
+		{
+			name: "docker: cross-service port conflict with docker host port",
+			cfg: Config{
+				Name: "test",
+				Services: map[string]Service{
+					"a": {Command: "x", Port: 8080},
+					"b": {Image: "nginx", Ports: []string{"8080:80"}},
+				},
+			},
+			wantErr: "both use port 8080",
+		},
+		{
+			name: "docker: valid service",
+			cfg: Config{
+				Name:     "test",
+				Services: map[string]Service{"a": {Image: "nginx", Port: 8080, Ports: []string{"8080:80"}}},
+			},
+			wantErr: "",
+		},
+		{
 			name: "valid config",
 			cfg: Config{
 				Name:     "test",
