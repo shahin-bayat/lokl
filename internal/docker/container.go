@@ -178,20 +178,15 @@ func (c *Container) streamLogs(ctx context.Context, containerID string) {
 
 	buf := make([]byte, 4096)
 	for {
-		select {
-		case <-ctx.Done():
+		n, readErr := rc.Read(buf)
+		if n > 0 {
+			_, _ = c.logs.Write(buf[:n])
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				c.logf("log stream error: %v", readErr)
+			}
 			return
-		default:
-			n, readErr := rc.Read(buf)
-			if n > 0 {
-				_, _ = c.logs.Write(buf[:n])
-			}
-			if readErr != nil {
-				if readErr != io.EOF {
-					c.logf("log stream error: %v", readErr)
-				}
-				return
-			}
 		}
 	}
 }
@@ -235,6 +230,7 @@ func (c *Container) startHealthCheck(ctx context.Context) {
 	timeout, _ := time.ParseDuration(c.config.Health.Timeout)
 	retries := *c.config.Health.Retries
 
+	client := &http.Client{Timeout: timeout}
 	failures := 0
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -246,7 +242,7 @@ func (c *Container) startHealthCheck(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if c.checkHealth(timeout) {
+			if c.checkHealth(client) {
 				failures = 0
 				c.mu.Lock()
 				prev := c.healthy
@@ -271,10 +267,9 @@ func (c *Container) startHealthCheck(ctx context.Context) {
 	}
 }
 
-func (c *Container) checkHealth(timeout time.Duration) bool {
+func (c *Container) checkHealth(client *http.Client) bool {
 	url := fmt.Sprintf("http://localhost:%d%s", c.config.Port, c.config.Health.Path)
 
-	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)
 	if err != nil {
 		return false
