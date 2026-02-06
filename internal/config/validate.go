@@ -134,6 +134,23 @@ func validateDockerService(name string, svc *Service) error {
 		}
 	}
 
+	if svc.Port > 0 && len(svc.Ports) > 0 {
+		found := false
+		for _, raw := range svc.Ports {
+			host, _, err := parsePortMapping(raw)
+			if err != nil {
+				continue
+			}
+			if host == svc.Port {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("service %q: port %d is not mapped in ports", name, svc.Port)
+		}
+	}
+
 	for _, raw := range svc.Volumes {
 		parts := strings.SplitN(raw, ":", 2)
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
