@@ -20,9 +20,32 @@ func resolveEnv(cfg *Config, configDir string) error {
 		cfg.Services[name] = svc
 	}
 
-	interpolate(cfg.Env)
+	// Shell exports can override .env and inline values.
+	lookup := func(key string) string {
+		if v, ok := os.LookupEnv(key); ok {
+			return v
+		}
+		if v, ok := cfg.Env[key]; ok {
+			return v
+		}
+		return ""
+	}
+
+	interpolateWith(cfg.Env, lookup)
 	for name, svc := range cfg.Services {
-		interpolate(svc.Env)
+		svcLookup := func(key string) string {
+			if v, ok := os.LookupEnv(key); ok {
+				return v
+			}
+			if v, ok := svc.Env[key]; ok {
+				return v
+			}
+			if v, ok := cfg.Env[key]; ok {
+				return v
+			}
+			return ""
+		}
+		interpolateWith(svc.Env, svcLookup)
 		cfg.Services[name] = svc
 	}
 
@@ -58,9 +81,9 @@ func loadEnvFiles(files []string, inline map[string]string, dst *map[string]stri
 	return nil
 }
 
-func interpolate(env map[string]string) {
+func interpolateWith(env map[string]string, lookup func(string) string) {
 	for k, v := range env {
-		env[k] = os.Expand(v, os.Getenv)
+		env[k] = os.Expand(v, lookup)
 	}
 }
 
