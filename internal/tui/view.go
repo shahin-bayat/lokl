@@ -2,21 +2,20 @@ package tui
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shahin-bayat/lokl/internal/types"
 )
 
-var ansiEscape = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\[[\?][0-9;]*[a-zA-Z]|[a-zA-Z])`)
-
 func sanitizeLog(s string) string {
-	s = ansiEscape.ReplaceAllString(s, "")
+	s = ansi.Strip(s)
 	var b strings.Builder
 	for _, r := range s {
-		if r == '\t' || r >= 32 {
+		if r == '\t' || !unicode.IsControl(r) {
 			b.WriteRune(r)
 		}
 	}
@@ -157,7 +156,7 @@ func (m Model) renderLogs(available int) string {
 
 	maxLogLines := available - strings.Count(headerStr, "\n")
 	if maxLogLines < 1 {
-		maxLogLines = 1
+		return ""
 	}
 
 	start := 0
@@ -172,11 +171,7 @@ func (m Model) renderLogs(available int) string {
 	for _, line := range logs[start:] {
 		line = sanitizeLog(line)
 		b.WriteString("  ")
-		if runes := []rune(line); logWidth > 0 && len(runes) > logWidth {
-			b.WriteString(string(runes[:logWidth]))
-		} else {
-			b.WriteString(line)
-		}
+		b.WriteString(ansi.Truncate(line, logWidth, ""))
 		b.WriteString("\n")
 	}
 
