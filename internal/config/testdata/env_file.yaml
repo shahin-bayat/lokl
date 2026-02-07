@@ -1,0 +1,14 @@
+name: test-envfile
+version: "1"
+
+env_file:
+  - test.env
+
+env:
+  DB_USER: admin
+
+services:
+  api:
+    command: npm run dev
+    env:
+      DATABASE_URL: postgres://${DB_USER}:${DB_PASS}@localhost/mydb
