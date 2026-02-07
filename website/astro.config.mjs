@@ -9,6 +9,10 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'lokl',
+			logo: {
+				src: './src/assets/logo.png',
+				replacesTitle: true,
+			},
 			favicon: '/favicon.png',
 			description: 'Local development environment orchestrator',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/shahin-bayat/lokl' }],
