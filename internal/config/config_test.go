@@ -239,6 +239,34 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestLoadWithEnvFile(t *testing.T) {
+	t.Setenv("DB_USER", "from-shell")
+	t.Setenv("DB_PASS", "shellpass")
+
+	cfg, err := Load("testdata/env_file.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Inline env "DB_USER: admin" should override env_file value "postgres"
+	if cfg.Env["DB_USER"] != "admin" {
+		t.Errorf("global DB_USER = %q, want %q", cfg.Env["DB_USER"], "admin")
+	}
+
+	// env_file value should be loaded for keys not in inline
+	if cfg.Env["DB_PASS"] != "s3cret" {
+		t.Errorf("global DB_PASS = %q, want %q", cfg.Env["DB_PASS"], "s3cret")
+	}
+
+	// After ApplyDefaults merges global into service, interpolation should have
+	// resolved ${DB_USER} and ${DB_PASS} from os.Environ
+	api := cfg.Services["api"]
+	want := "postgres://from-shell:shellpass@localhost/mydb"
+	if api.Env["DATABASE_URL"] != want {
+		t.Errorf("DATABASE_URL = %q, want %q", api.Env["DATABASE_URL"], want)
+	}
+}
+
 func TestApplyDefaults(t *testing.T) {
 	cfg := &Config{
 		Services: map[string]Service{

@@ -9,6 +9,10 @@ proxy:
   domain: myproject.dev # Base domain - services get subdomains like app.myproject.dev
   https: true # Enable HTTPS with auto-generated certificates (default: true)
 
+# Load env vars from files (gitignored, good for secrets)
+env_file:
+  - .env
+
 # Global environment variables available to all services
 env:
   NODE_ENV: development
@@ -52,7 +56,7 @@ services:
     subdomain: api # https://api.myproject.dev
 
     env:
-      DATABASE_URL: postgresql://app:dev@localhost:5432/myproject_dev
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/myproject_dev
       REDIS_URL: redis://localhost:6379
 
     depends_on:
@@ -80,8 +84,8 @@ services:
       - "5432:5432" # host:container port mapping
     port: 5432 # Host port used for proxy routing and health checks
     env:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: dev
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: myproject_dev
     volumes:
       - ./.lokl/postgres:/var/lib/postgresql/data

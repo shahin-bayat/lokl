@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	Name     string             `yaml:"name"`
 	Version  string             `yaml:"version"`
 	Proxy    ProxyConfig        `yaml:"proxy"`
+	EnvFile  []string           `yaml:"env_file"`
 	Env      map[string]string  `yaml:"env"`
 	Services map[string]Service `yaml:"services"`
 }
@@ -31,7 +33,8 @@ type Service struct {
 
 	Rewrite *RewriteConfig `yaml:"rewrite"`
 
-	Env map[string]string `yaml:"env"`
+	EnvFile []string          `yaml:"env_file"`
+	Env     map[string]string `yaml:"env"`
 
 	DependsOn []string `yaml:"depends_on"`
 
@@ -67,6 +70,10 @@ func Load(path string) (*Config, error) {
 	cfg, err := parse(path)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := resolveEnv(cfg, filepath.Dir(path)); err != nil {
+		return nil, fmt.Errorf("resolving env: %w", err)
 	}
 
 	ApplyDefaults(cfg)
