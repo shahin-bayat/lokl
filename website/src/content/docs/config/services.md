@@ -25,6 +25,7 @@ services:
 | `path` | string | Working directory (relative to config) |
 | `port` | int | Port the service listens on |
 | `env` | map | Environment variables |
+| `env_file` | list | Paths to `.env` files to load |
 | `depends_on` | list | Services to start first |
 | `autostart` | bool | Start automatically (default: true) |
 | `restart` | string | Restart policy: `no`, `always`, `on-failure` |
@@ -55,6 +56,7 @@ services:
 | `ports` | list | Port mappings (`host:container`) |
 | `port` | int | Host port for proxy routing and health checks |
 | `env` | map | Environment variables |
+| `env_file` | list | Paths to `.env` files to load |
 | `volumes` | list | Volume mounts (`host:container`) |
 | `subdomain` | string | Subdomain for proxy routing |
 | `depends_on` | list | Services to start first |
@@ -102,3 +104,39 @@ services:
       timeout: 5s
       retries: 3
 ```
+
+## Environment Variables
+
+### Env Files
+
+Load variables from `.env` files instead of hardcoding secrets:
+
+```yaml
+# Global — available to all services
+env_file:
+  - .env
+
+services:
+  api:
+    command: pnpm dev
+    env_file:
+      - .env.local
+```
+
+Standard dotenv format: `KEY=VALUE`, `# comments`, blank lines, optional quotes. Paths are relative to `lokl.yaml`.
+
+Inline `env` values take priority over `env_file` values.
+
+### Variable Interpolation
+
+Reference host environment variables with `${VAR}` or `$VAR`:
+
+```yaml
+services:
+  api:
+    command: pnpm dev
+    env:
+      DATABASE_URL: postgres://${DB_USER}:${DB_PASS}@localhost:5432/mydb
+```
+
+Variables are resolved against the host's environment at config load time. Missing variables expand to an empty string.
