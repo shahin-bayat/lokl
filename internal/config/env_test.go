@@ -151,6 +151,27 @@ func TestResolveEnv(t *testing.T) {
 		}
 	})
 
+	t.Run("interpolation resolves from env_file values", func(t *testing.T) {
+		cfg := &Config{
+			Name:    "test",
+			EnvFile: []string{"testdata/test.env"},
+			Services: map[string]Service{
+				"api": {
+					Command: "x",
+					Env:     map[string]string{"DSN": "postgres://${DB_USER}:${DB_PASS}@localhost/db"},
+				},
+			},
+		}
+
+		if err := resolveEnv(cfg, "."); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := "postgres://postgres:s3cret@localhost/db"
+		if cfg.Services["api"].Env["DSN"] != want {
+			t.Errorf("DSN = %q, want %q", cfg.Services["api"].Env["DSN"], want)
+		}
+	})
+
 	t.Run("missing env_file returns error", func(t *testing.T) {
 		cfg := &Config{
 			Name:     "test",
