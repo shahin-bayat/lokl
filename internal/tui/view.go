@@ -2,12 +2,26 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/shahin-bayat/lokl/internal/types"
 )
+
+var ansiEscape = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\[[\?][0-9;]*[a-zA-Z]|[a-zA-Z])`)
+
+func sanitizeLog(s string) string {
+	s = ansiEscape.ReplaceAllString(s, "")
+	var b strings.Builder
+	for _, r := range s {
+		if r == '\t' || r >= 32 {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
 func (m Model) View() string {
 	if m.quitting {
@@ -18,20 +32,25 @@ func (m Model) View() string {
 		return m.renderHelp()
 	}
 
-	var b strings.Builder
+	header := m.renderHeader()
+	services := m.renderServices()
+	statusBar := m.renderStatusBar()
 
-	b.WriteString(m.renderHeader())
+	var b strings.Builder
+	b.WriteString(header)
 	b.WriteString("\n\n")
-	b.WriteString(m.renderServices())
+	b.WriteString(services)
 
 	if m.showLogs {
-		b.WriteString(m.renderLogs())
+		shell := header + "\n\n" + services + "\n" + statusBar
+		available := m.height - lipgloss.Height(shell)
+		b.WriteString(m.renderLogs(available))
 	}
 
 	b.WriteString("\n")
-	b.WriteString(m.renderStatusBar())
+	b.WriteString(statusBar)
 
-	return b.String()
+	return lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, b.String())
 }
 
 func (m Model) renderHeader() string {
@@ -120,37 +139,44 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
 	return row
 }
 
-func (m Model) renderLogs() string {
+func (m Model) renderLogs(available int) string {
 	svc := m.selectedService()
 	if svc == nil {
 		return ""
 	}
 
-	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString(styleDomain.Render(fmt.Sprintf("─── Logs: %s ", svc.Name)))
-	b.WriteString(styleDomain.Render(strings.Repeat("─", 40)))
-	b.WriteString("\n\n")
+	headerStr := "\n" +
+		styleDomain.Render(fmt.Sprintf("─── Logs: %s ", svc.Name)) +
+		styleDomain.Render(strings.Repeat("─", 40)) +
+		"\n\n"
 
 	logs := m.controller.ServiceLogs(svc.Name)
 	if len(logs) == 0 {
-		b.WriteString(styleStopped.Render("  No logs available"))
-		b.WriteString("\n")
-		return b.String()
+		return headerStr + styleStopped.Render("  No logs available") + "\n"
 	}
 
-	maxLogLines := m.height / 2
-	if maxLogLines < 3 {
-		maxLogLines = 3
+	maxLogLines := available - strings.Count(headerStr, "\n")
+	if maxLogLines < 1 {
+		maxLogLines = 1
 	}
 
 	start := 0
 	if len(logs) > maxLogLines {
 		start = len(logs) - maxLogLines
 	}
+
+	logWidth := m.width - 2
+
+	var b strings.Builder
+	b.WriteString(headerStr)
 	for _, line := range logs[start:] {
+		line = sanitizeLog(line)
 		b.WriteString("  ")
-		b.WriteString(line)
+		if runes := []rune(line); logWidth > 0 && len(runes) > logWidth {
+			b.WriteString(string(runes[:logWidth]))
+		} else {
+			b.WriteString(line)
+		}
 		b.WriteString("\n")
 	}
 
