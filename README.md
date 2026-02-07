@@ -7,7 +7,7 @@
 Define your entire local dev environment in a single file. Start everything with `lokl up`.
 
 [![Build](https://github.com/shahin-bayat/lokl/actions/workflows/ci.yml/badge.svg)](https://github.com/shahin-bayat/lokl/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-lokl-purple)](https://shahin-bayat.github.io/lokl/)
 
@@ -34,6 +34,10 @@ That's it. Frontend, backend, databases, HTTPS routing — all running.
 🔐 **Automatic HTTPS** — Generated certificates for custom domains (`app.myproject.dev`)
 
 🔄 **Process management** — Health checks, dependency ordering, auto-restart
+
+🐳 **Docker support** — Run databases and caches as containers alongside your services
+
+🔑 **Env files & interpolation** — Load secrets from `.env` files, reference with `${VAR}`
 
 🖥️ **Interactive TUI** — Start/stop services, view logs, toggle proxy
 
@@ -87,6 +91,8 @@ services:
     path: apps/api
     port: 3000
     subdomain: api
+    env:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/myproject
     depends_on:
       - db
 
@@ -94,8 +100,11 @@ services:
     image: postgres:16
     ports:
       - "5432:5432"
+    port: 5432
+    env_file:
+      - .env
     env:
-      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: myproject
 ```
 
 Then:
@@ -105,7 +114,7 @@ Then:
 ## Requirements
 
 - macOS or Linux
-- Go 1.23+ (for installation from source)
+- Go 1.25+ (for installation from source)
 - Docker (for container-based services)
 
 ## License
