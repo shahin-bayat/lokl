@@ -1,9 +1,6 @@
 package config
 
-import (
-	"os"
-	"testing"
-)
+import "testing"
 
 func TestParseEnvFile(t *testing.T) {
 	tests := []struct {
@@ -100,11 +97,9 @@ func TestResolveEnv(t *testing.T) {
 	})
 
 	t.Run("missing var expands to empty", func(t *testing.T) {
-		os.Unsetenv("SURELY_MISSING_VAR")
-
 		cfg := &Config{
 			Name:     "test",
-			Env:      map[string]string{"VAL": "prefix-${SURELY_MISSING_VAR}-suffix"},
+			Env:      map[string]string{"VAL": "prefix-${SURELY_MISSING_VAR_XYZZY}-suffix"},
 			Services: map[string]Service{},
 		}
 
