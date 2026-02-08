@@ -325,6 +325,123 @@ func TestLogs(t *testing.T) {
 	})
 }
 
+func TestContainerStartPullError(t *testing.T) {
+	mock := &mockAPI{
+		ImageExistsFn: func(_ context.Context, _ string) (bool, error) {
+			return false, nil
+		},
+		PullImageFn: func(_ context.Context, _ string, _ func(string)) error {
+			return fmt.Errorf("network timeout")
+		},
+	}
+
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	if err := c.Start(); err == nil {
+		t.Fatal("expected error from pull failure")
+	}
+	if c.IsRunning() {
+		t.Error("expected not running after pull error")
+	}
+}
+
+func TestContainerStartImageCheckError(t *testing.T) {
+	mock := &mockAPI{
+		ImageExistsFn: func(_ context.Context, _ string) (bool, error) {
+			return false, fmt.Errorf("docker daemon unreachable")
+		},
+	}
+
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	if err := c.Start(); err == nil {
+		t.Fatal("expected error from image check failure")
+	}
+	if c.IsRunning() {
+		t.Error("expected not running after image check error")
+	}
+}
+
+func TestContainerStartContainerStartError(t *testing.T) {
+	removed := false
+	mock := &mockAPI{
+		StartContainerFn: func(_ context.Context, _ string) error {
+			return fmt.Errorf("permission denied")
+		},
+		RemoveContainerFn: func(_ context.Context, _ string) error {
+			removed = true
+			return nil
+		},
+	}
+
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	if err := c.Start(); err == nil {
+		t.Fatal("expected error from container start failure")
+	}
+	if c.IsRunning() {
+		t.Error("expected not running after start error")
+	}
+	if !removed {
+		t.Error("expected container cleanup (remove) after start error")
+	}
+}
+
+func TestContainerStartWithEnv(t *testing.T) {
+	var gotCfg ContainerConfig
+	mock := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "test-id", nil
+		},
+	}
+
+	svc := config.Service{
+		Image: "nginx",
+		Env:   map[string]string{"NODE_ENV": "production", "PORT": "3000"},
+	}
+	c := NewContainer("web", svc, mock, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	if len(gotCfg.Env) != 2 {
+		t.Errorf("env count = %d, want 2", len(gotCfg.Env))
+	}
+	if gotCfg.Env["NODE_ENV"] != "production" {
+		t.Errorf("NODE_ENV = %q, want production", gotCfg.Env["NODE_ENV"])
+	}
+}
+
+func TestContainerStartWithVolumes(t *testing.T) {
+	var gotCfg ContainerConfig
+	mock := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "test-id", nil
+		},
+	}
+
+	svc := config.Service{
+		Image:   "postgres",
+		Volumes: []string{"./data:/var/lib/postgresql/data"},
+		Ports:   []string{"5432:5432"},
+	}
+	c := NewContainer("db", svc, mock, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	if len(gotCfg.Volumes) != 1 {
+		t.Errorf("volumes count = %d, want 1", len(gotCfg.Volumes))
+	}
+	if gotCfg.Volumes[0] != "./data:/var/lib/postgresql/data" {
+		t.Errorf("volume = %q, want ./data:/var/lib/postgresql/data", gotCfg.Volumes[0])
+	}
+	if len(gotCfg.Ports) != 1 || gotCfg.Ports[0].Host != 5432 {
+		t.Errorf("ports = %+v, want [{5432 5432 }]", gotCfg.Ports)
+	}
+}
+
 func TestStateString(t *testing.T) {
 	tests := []struct {
 		s    state
