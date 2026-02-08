@@ -75,6 +75,32 @@ func TestHostsManagerRemoveBlock(t *testing.T) {
 	}
 }
 
+func TestHostsManagerBlock(t *testing.T) {
+	h := newHostsManager("myproject")
+
+	got := h.block([]string{"app.example.com", "api.example.com"})
+
+	want := `# lokl:myproject - START
+127.0.0.1 app.example.com
+127.0.0.1 api.example.com
+# lokl:myproject - END`
+
+	if got != want {
+		t.Errorf("block():\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestHostsManagerBlockEmpty(t *testing.T) {
+	h := newHostsManager("myproject")
+
+	got := h.block(nil)
+	want := "# lokl:myproject - START\n# lokl:myproject - END"
+
+	if got != want {
+		t.Errorf("block(nil):\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestHostsManagerMarkers(t *testing.T) {
 	h := newHostsManager("testproject")
 

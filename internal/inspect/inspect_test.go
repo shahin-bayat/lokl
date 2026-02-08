@@ -225,6 +225,41 @@ func TestInspectSuggestedDomain(t *testing.T) {
 	}
 }
 
+func TestGetScripts(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, `{"name":"app","scripts":{"dev":"vite","build":"tsc","test":"jest"}}`)
+
+	scripts, err := GetScripts(dir)
+	if err != nil {
+		t.Fatalf("GetScripts: %v", err)
+	}
+	if len(scripts) != 3 {
+		t.Fatalf("scripts len = %d, want 3", len(scripts))
+	}
+	if scripts["dev"] != "vite" {
+		t.Errorf("scripts[dev] = %q, want vite", scripts["dev"])
+	}
+}
+
+func TestGetScriptsNoFile(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := GetScripts(dir)
+	if err == nil {
+		t.Fatal("expected error for missing package.json")
+	}
+}
+
+func TestGetScriptsInvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	writePackageJSON(t, dir, `{invalid}`)
+
+	_, err := GetScripts(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
 // --- Helpers ---
 
 func writePackageJSON(t *testing.T, dir, content string) {
