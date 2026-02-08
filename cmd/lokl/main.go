@@ -49,7 +49,7 @@ var statusCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfigFile, "config file path")
-	rootCmd.AddCommand(upCmd, downCmd, statusCmd, dnsCmd, initCmd)
+	rootCmd.AddCommand(upCmd, downCmd, statusCmd, dnsCmd, initCmd, validateCmd)
 }
 
 func waitForSignal() {
