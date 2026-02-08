@@ -148,10 +148,7 @@ func (m *mockProxy) IsProxyEnabled(domain string) bool {
 	return true
 }
 
-type mockLogger struct {
-	infos  []string
-	errors []string
-}
+type mockLogger struct{}
 
 func (m *mockLogger) Infof(format string, args ...any)  {}
 func (m *mockLogger) Errorf(format string, args ...any) {}
@@ -172,10 +169,10 @@ func simpleConfig(services map[string]config.Service) *config.Config {
 	}
 }
 
-func proxyConfig(domain string, services map[string]config.Service) *config.Config {
+func proxyConfig(services map[string]config.Service) *config.Config {
 	return &config.Config{
 		Name:     "test-project",
-		Proxy:    config.ProxyConfig{Domain: domain},
+		Proxy:    config.ProxyConfig{Domain: "example.com"},
 		Services: services,
 	}
 }
@@ -323,7 +320,7 @@ func TestStart(t *testing.T) {
 		}
 	}
 
-	cfg := proxyConfig("example.com", map[string]config.Service{
+	cfg := proxyConfig(map[string]config.Service{
 		"db":  {Command: "postgres"},
 		"web": {Command: "npm start", DependsOn: []string{"db"}},
 	})
@@ -353,7 +350,7 @@ func TestStartSkipsAutoStartFalse(t *testing.T) {
 		}
 	}
 
-	cfg := proxyConfig("example.com", map[string]config.Service{
+	cfg := proxyConfig(map[string]config.Service{
 		"web":    {Command: "npm start"},
 		"worker": {Command: "worker", AutoStart: boolPtr(false)},
 	})
@@ -393,7 +390,7 @@ func TestStartServiceFailureTriggersCleanup(t *testing.T) {
 		}
 	}
 
-	cfg := proxyConfig("example.com", map[string]config.Service{
+	cfg := proxyConfig(map[string]config.Service{
 		"db":  {Command: "postgres"},
 		"web": {Command: "npm start", DependsOn: []string{"db"}},
 	})
@@ -468,7 +465,7 @@ func TestToggleProxy(t *testing.T) {
 		EnableProxyFn:    func(_ string) bool { enabled = true; return true },
 	}
 
-	cfg := proxyConfig("example.com", map[string]config.Service{
+	cfg := proxyConfig(map[string]config.Service{
 		"web": {Command: "npm start", Subdomain: "app"},
 	})
 	s := newTestSupervisor(cfg, nil, proxy)
@@ -526,7 +523,7 @@ func TestServices(t *testing.T) {
 		IsProxyEnabledFn: func(_ string) bool { return true },
 	}
 
-	cfg := proxyConfig("example.com", map[string]config.Service{
+	cfg := proxyConfig(map[string]config.Service{
 		"web": {Command: "npm start", Port: 3000, Subdomain: "app"},
 		"api": {Command: "go run .", Port: 8080, Subdomain: "api"},
 	})
@@ -562,7 +559,7 @@ func TestServicesWithPathPrefix(t *testing.T) {
 		IsProxyEnabledFn: func(_ string) bool { return true },
 	}
 
-	cfg := proxyConfig("example.com", map[string]config.Service{
+	cfg := proxyConfig(map[string]config.Service{
 		"web": {
 			Command:   "npm start",
 			Port:      3000,
@@ -618,7 +615,7 @@ func TestProjectName(t *testing.T) {
 }
 
 func TestServiceDomain(t *testing.T) {
-	cfg := proxyConfig("example.com", nil)
+	cfg := proxyConfig(nil)
 	s := newTestSupervisor(cfg, nil, nil)
 
 	tests := []struct {
