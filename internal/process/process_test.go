@@ -4,7 +4,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -120,12 +122,11 @@ func TestCheckHealth(t *testing.T) {
 	defer ts.Close()
 
 	// Extract port from test server URL
-	parts := strings.Split(ts.URL, ":")
-	port := parts[len(parts)-1]
+	port := testServerPort(t, ts)
 
 	p := New("web", config.Service{
 		Command: "npm start",
-		Port:    mustAtoi(port),
+		Port:    port,
 		Health:  &config.HealthConfig{Path: "/"},
 	}, func() {})
 
@@ -141,12 +142,11 @@ func TestCheckHealthUnhealthy(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	parts := strings.Split(ts.URL, ":")
-	port := parts[len(parts)-1]
+	port := testServerPort(t, ts)
 
 	p := New("web", config.Service{
 		Command: "npm start",
-		Port:    mustAtoi(port),
+		Port:    port,
 		Health:  &config.HealthConfig{Path: "/"},
 	}, func() {})
 
@@ -163,12 +163,11 @@ func TestCheckHealthTimeout(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	parts := strings.Split(ts.URL, ":")
-	port := parts[len(parts)-1]
+	port := testServerPort(t, ts)
 
 	p := New("web", config.Service{
 		Command: "npm start",
-		Port:    mustAtoi(port),
+		Port:    port,
 		Health:  &config.HealthConfig{Path: "/"},
 	}, func() {})
 
@@ -178,12 +177,21 @@ func TestCheckHealthTimeout(t *testing.T) {
 	}
 }
 
-func mustAtoi(s string) int {
-	var n int
-	for _, c := range s {
-		n = n*10 + int(c-'0')
+func testServerPort(t *testing.T, ts *httptest.Server) int {
+	t.Helper()
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
 	}
-	return n
+	_, portStr, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		t.Fatalf("split host port: %v", err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("parse port: %v", err)
+	}
+	return port
 }
 
 func TestStateString(t *testing.T) {

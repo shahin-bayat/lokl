@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -85,10 +87,17 @@ func TestRewritePath(t *testing.T) {
 
 func upstreamPort(t *testing.T, ts *httptest.Server) int {
 	t.Helper()
-	parts := strings.Split(ts.URL, ":")
-	port, err := strconv.Atoi(parts[len(parts)-1])
+	u, err := url.Parse(ts.URL)
 	if err != nil {
-		t.Fatalf("parse upstream port: %v", err)
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	_, portStr, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		t.Fatalf("split host port: %v", err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("parse port: %v", err)
 	}
 	return port
 }
