@@ -1,0 +1,13 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 60%
+
+ignore:
+  - "cmd/lokl/"
+  - "internal/tui/"
+  - "internal/logger/"
+  - "internal/version/"
+  - "internal/types/"
+  - "internal/docker/client.go"
