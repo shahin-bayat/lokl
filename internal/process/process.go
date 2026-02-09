@@ -4,6 +4,7 @@ package process
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -87,24 +88,46 @@ func (p *Process) Start() error {
 	p.cmd.Env = p.buildEnv()
 
 	p.logs = newLogs(maxLogLines)
-	p.cmd.Stdout = p.logs
-	p.cmd.Stderr = p.logs
+
+	// Use os.Pipe so cmd.Wait() only waits for process exit, not I/O.
+	// When Stdout is an *os.File, Go passes the fd directly — no internal
+	// copy goroutine. This prevents Wait() from blocking when orphaned
+	// child processes (e.g. esbuild watchers) keep the pipe open.
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		p.state = stateFailed
+		return fmt.Errorf("process %s: creating pipe: %w", p.name, err)
+	}
+	p.cmd.Stdout = pw
+	p.cmd.Stderr = pw
 
 	if err := p.cmd.Start(); err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
 		p.state = stateFailed
 		return fmt.Errorf("process %s: failed to start: %w", p.name, err)
 	}
 
+	_ = pw.Close()
+	go func() { _, _ = io.Copy(p.logs, pr) }()
+
 	p.state = stateRunning
+	if p.config.Health == nil || p.config.Health.Path == "" {
+		p.healthy = true
+	}
 	p.exitCh = make(chan struct{})
 	p.onChange()
 
-	// Single goroutine that waits for process exit and signals via channel
 	go func() {
 		_ = p.cmd.Wait()
+		_ = pr.Close()
 		p.mu.Lock()
 		if p.state == stateRunning {
 			p.state = stateFailed
+		}
+		p.healthy = false
+		if p.cancel != nil {
+			p.cancel()
 		}
 		p.mu.Unlock()
 		p.onChange()
