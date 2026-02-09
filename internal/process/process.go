@@ -29,7 +29,6 @@ type Process struct {
 
 	cmd    *exec.Cmd
 	logs   *logs
-	pipe   *os.File
 	cancel context.CancelFunc
 	exitCh chan struct{}
 	mu     sync.Mutex
@@ -110,10 +109,12 @@ func (p *Process) Start() error {
 	}
 
 	_ = pw.Close()
-	p.pipe = pr
 	go func() { _, _ = io.Copy(p.logs, pr) }()
 
 	p.state = stateRunning
+	if p.config.Health == nil || p.config.Health.Path == "" {
+		p.healthy = true
+	}
 	p.exitCh = make(chan struct{})
 	p.onChange()
 
