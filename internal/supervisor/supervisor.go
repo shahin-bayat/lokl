@@ -34,6 +34,12 @@ type ProxyManager interface {
 	IsServiceProxyEnabled(name string) bool
 }
 
+// Logger defines the logging interface for supervisor output.
+type Logger interface {
+	Infof(format string, args ...any)
+	Errorf(format string, args ...any)
+}
+
 const eventBufferSize = 100
 
 // ProcessFactory creates a new process runner.
