@@ -78,7 +78,7 @@ func Load(path string) (*Config, error) {
 
 	applyDefaults(cfg)
 
-	if err := Validate(cfg); err != nil {
+	if err := validate(cfg); err != nil {
 		return nil, fmt.Errorf("validating config: %w", err)
 	}
 
