@@ -282,7 +282,7 @@ func TestLoadWithEnvFile(t *testing.T) {
 		t.Errorf("global DB_PASS = %q, want %q", cfg.Env["DB_PASS"], "s3cret")
 	}
 
-	// After ApplyDefaults merges global into service, interpolation should have
+	// After applyDefaults merges global into service, interpolation should have
 	// resolved ${DB_USER} and ${DB_PASS} from os.Environ
 	api := cfg.Services["api"]
 	want := "postgres://from-shell:shellpass@localhost/mydb"
@@ -299,7 +299,7 @@ func TestApplyDefaults(t *testing.T) {
 		},
 	}
 
-	ApplyDefaults(cfg)
+	applyDefaults(cfg)
 
 	if cfg.Proxy.HTTPS == nil || !*cfg.Proxy.HTTPS {
 		t.Error("proxy.https should default to true")

@@ -13,7 +13,7 @@ const (
 	defaultHealthRetries  = 3
 )
 
-func ApplyDefaults(cfg *Config) {
+func applyDefaults(cfg *Config) {
 	if cfg.Proxy.HTTPS == nil {
 		t := true
 		cfg.Proxy.HTTPS = &t
