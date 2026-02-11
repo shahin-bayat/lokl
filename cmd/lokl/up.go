@@ -57,7 +57,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 	pm := proxy.New(cfg)
 	sup := supervisor.New(cfg, pf, pm)
 
-	go printEvents(sup.Subscribe())
+	if detach {
+		go printEvents(sup.Subscribe())
+	}
 
 	if err := sup.Start(); err != nil {
 		return err
