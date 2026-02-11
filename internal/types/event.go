@@ -6,10 +6,12 @@ type EventType int
 const (
 	EventServiceStateChanged EventType = iota
 	EventServiceHealthChanged
+	EventProgress
+	EventError
 )
 
-// Event represents a service state change notification.
 type Event struct {
 	Type    EventType
 	Service string
+	Message string
 }

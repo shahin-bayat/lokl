@@ -36,19 +36,13 @@ type ProxyManager interface {
 	IsServiceProxyEnabled(name string) bool
 }
 
-// Logger defines the logging interface for supervisor output.
-type Logger interface {
-	Infof(format string, args ...any)
-	Errorf(format string, args ...any)
-}
-
 type DNSNotConfiguredError struct {
-	Domains  []string
-	DNSBlock string
+	Domains []string
 }
 
 func (e *DNSNotConfiguredError) Error() string {
-	return "DNS not configured for: " + strings.Join(e.Domains, ", ")
+	return fmt.Sprintf("DNS not configured for: %s\nRun: sudo lokl dns setup",
+		strings.Join(e.Domains, ", "))
 }
 
 const eventBufferSize = 100
@@ -61,17 +55,15 @@ type Supervisor struct {
 	proxyManager   ProxyManager
 	processFactory ProcessFactory
 	processes      map[string]ProcessRunner
-	log            Logger
 	events         chan types.Event
 }
 
-func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager, log Logger) *Supervisor {
+func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager) *Supervisor {
 	return &Supervisor{
 		cfg:            cfg,
 		proxyManager:   pm,
 		processFactory: pf,
 		processes:      make(map[string]ProcessRunner),
-		log:            log,
 		events:         make(chan types.Event, eventBufferSize),
 	}
 }
@@ -101,7 +93,7 @@ func (s *Supervisor) Start() error {
 			return err
 		}
 		started = append(started, name)
-		s.log.Infof("✓ Started %s\n", name)
+		s.emit(types.Event{Type: types.EventProgress, Service: name, Message: "started"})
 	}
 
 	if s.cfg.Proxy.Domain != "" {
@@ -117,9 +109,9 @@ func (s *Supervisor) Start() error {
 func (s *Supervisor) Stop() error {
 	for name := range s.processes {
 		if err := s.StopService(name); err != nil {
-			s.log.Errorf("✗ Failed to stop %s: %v\n", name, err)
+			s.emit(types.Event{Type: types.EventError, Service: name, Message: fmt.Sprintf("failed to stop: %v", err)})
 		} else {
-			s.log.Infof("✓ Stopped %s\n", name)
+			s.emit(types.Event{Type: types.EventProgress, Service: name, Message: "stopped"})
 		}
 	}
 
@@ -127,6 +119,7 @@ func (s *Supervisor) Stop() error {
 		return fmt.Errorf("stopping proxy: %w", err)
 	}
 
+	close(s.events)
 	return nil
 }
 
@@ -145,7 +138,7 @@ func (s *Supervisor) StartService(name string) error {
 	}
 
 	onChange := func() {
-		s.emit(name)
+		s.emit(types.Event{Type: types.EventServiceStateChanged, Service: name})
 	}
 	p := s.processFactory(name, svc, onChange)
 	if err := p.Start(); err != nil {
@@ -237,9 +230,9 @@ func (s *Supervisor) ServiceLogs(name string) []string {
 	return nil
 }
 
-func (s *Supervisor) emit(service string) {
+func (s *Supervisor) emit(ev types.Event) {
 	select {
-	case s.events <- types.Event{Service: service}:
+	case s.events <- ev:
 	default:
 	}
 }
@@ -247,7 +240,7 @@ func (s *Supervisor) emit(service string) {
 func (s *Supervisor) cleanupStarted(names []string) {
 	for _, name := range slices.Backward(names) {
 		if err := s.StopService(name); err != nil {
-			s.log.Errorf("✗ Cleanup failed for %s: %v\n", name, err)
+			s.emit(types.Event{Type: types.EventError, Service: name, Message: fmt.Sprintf("cleanup failed: %v", err)})
 		}
 	}
 }
@@ -266,32 +259,29 @@ func (s *Supervisor) serviceDomain(svc config.Service) string {
 }
 
 func (s *Supervisor) setupProxy() error {
-	s.log.Infof("Setting up proxy...\n")
+	s.emit(types.Event{Type: types.EventProgress, Message: "setting up proxy"})
 
 	if err := s.proxyManager.Setup(); err != nil {
 		return fmt.Errorf("proxy setup: %w", err)
 	}
-	s.log.Infof("✓ Certificates ready in %s\n", s.proxyManager.CertDir())
+	s.emit(types.Event{Type: types.EventProgress, Message: fmt.Sprintf("certificates ready in %s", s.proxyManager.CertDir())})
 
 	unresolved := s.proxyManager.UnresolvedDomains()
 	if len(unresolved) > 0 {
-		return &DNSNotConfiguredError{
-			Domains:  unresolved,
-			DNSBlock: s.proxyManager.DNSBlock(),
-		}
+		return &DNSNotConfiguredError{Domains: unresolved}
 	}
 
-	s.log.Infof("✓ DNS configured for %d domains\n", len(s.proxyManager.Domains()))
+	s.emit(types.Event{Type: types.EventProgress, Message: fmt.Sprintf("DNS configured for %d domains", len(s.proxyManager.Domains()))})
 	return nil
 }
 
 func (s *Supervisor) startProxy() error {
 	go func() {
 		if err := s.proxyManager.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.log.Errorf("✗ Proxy error: %v\n", err)
+			s.emit(types.Event{Type: types.EventError, Message: fmt.Sprintf("proxy: %v", err)})
 		}
 	}()
 
-	s.log.Infof("✓ Proxy listening on :%d\n", s.proxyManager.Port())
+	s.emit(types.Event{Type: types.EventProgress, Message: fmt.Sprintf("proxy listening on :%d", s.proxyManager.Port())})
 	return nil
 }

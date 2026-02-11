@@ -148,18 +148,13 @@ func (m *mockProxy) IsServiceProxyEnabled(name string) bool {
 	return true
 }
 
-type mockLogger struct{}
-
-func (m *mockLogger) Infof(format string, args ...any)  {}
-func (m *mockLogger) Errorf(format string, args ...any) {}
-
 // --- Helpers ---
 
 func newTestSupervisor(cfg *config.Config, factory ProcessFactory, proxy ProxyManager) *Supervisor {
 	if proxy == nil {
 		proxy = &mockProxy{}
 	}
-	return New(cfg, factory, proxy, &mockLogger{})
+	return New(cfg, factory, proxy)
 }
 
 func simpleConfig(services map[string]config.Service) *config.Config {
@@ -658,12 +653,15 @@ func TestEmit(t *testing.T) {
 	s := newTestSupervisor(cfg, nil, nil)
 
 	ch := s.Subscribe()
-	s.emit("web")
+	s.emit(types.Event{Type: types.EventProgress, Service: "web", Message: "started"})
 
 	select {
 	case ev := <-ch:
 		if ev.Service != "web" {
 			t.Errorf("event.Service = %q, want web", ev.Service)
+		}
+		if ev.Message != "started" {
+			t.Errorf("event.Message = %q, want started", ev.Message)
 		}
 	default:
 		t.Fatal("expected event on channel")
@@ -674,13 +672,12 @@ func TestEmitDropsWhenFull(t *testing.T) {
 	cfg := simpleConfig(nil)
 	s := newTestSupervisor(cfg, nil, nil)
 
-	// Fill the channel
 	for range eventBufferSize {
-		s.emit("fill")
+		s.emit(types.Event{Type: types.EventProgress, Message: "fill"})
 	}
 
-	// This should not block
-	s.emit("overflow")
+	// Must not block
+	s.emit(types.Event{Type: types.EventProgress, Message: "overflow"})
 }
 
 var errTest = fmt.Errorf("test error")

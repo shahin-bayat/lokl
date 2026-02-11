@@ -1,20 +1,20 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"strings"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shahin-bayat/lokl/internal/config"
 	"github.com/shahin-bayat/lokl/internal/docker"
-	"github.com/shahin-bayat/lokl/internal/logger"
 	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
 	"github.com/shahin-bayat/lokl/internal/supervisor"
 	"github.com/shahin-bayat/lokl/internal/tui"
+	"github.com/shahin-bayat/lokl/internal/types"
 )
 
 var detach bool
@@ -54,27 +54,20 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return process.New(name, svc, onChange)
 	}
 
-	log := logger.New(os.Stdout)
 	pm := proxy.New(cfg)
+	sup := supervisor.New(cfg, pf, pm)
 
-	sup := supervisor.New(cfg, pf, pm, log)
+	go printEvents(sup.Subscribe())
 
 	if err := sup.Start(); err != nil {
-		var dnsErr *supervisor.DNSNotConfiguredError
-		if errors.As(err, &dnsErr) {
-			log.Infof("\n⚠ DNS entries needed for: %s\n", strings.Join(dnsErr.Domains, ", "))
-			log.Infof("\nOption 1 - Run:\n")
-			log.Infof("  sudo lokl dns setup\n")
-			log.Infof("\nOption 2 - Add manually to /etc/hosts:\n")
-			log.Infof("  %s\n", strings.ReplaceAll(dnsErr.DNSBlock, "\n", "\n  "))
-		}
 		return err
 	}
 
 	if detach {
-		log.Infof("\nPress Ctrl+C to stop\n")
-		waitForSignal()
-		log.Infof("\nShutting down...\n")
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		signal.Stop(sigCh)
 	} else {
 		app := tui.New(sup)
 		if err := app.Run(); err != nil {
@@ -84,4 +77,23 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	return sup.Stop()
+}
+
+func printEvents(ch <-chan types.Event) {
+	for ev := range ch {
+		switch ev.Type {
+		case types.EventProgress:
+			if ev.Service != "" {
+				fmt.Fprintf(os.Stderr, "✓ %s: %s\n", ev.Service, ev.Message)
+			} else {
+				fmt.Fprintf(os.Stderr, "✓ %s\n", ev.Message)
+			}
+		case types.EventError:
+			if ev.Service != "" {
+				fmt.Fprintf(os.Stderr, "✗ %s: %s\n", ev.Service, ev.Message)
+			} else {
+				fmt.Fprintf(os.Stderr, "✗ %s\n", ev.Message)
+			}
+		}
+	}
 }

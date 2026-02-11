@@ -19,7 +19,7 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/shahin-bayat/lokl/internal/version.Version={{.Version}}
+      - -X main.buildVersion={{.Version}}
 
 archives:
   - formats:

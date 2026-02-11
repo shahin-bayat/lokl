@@ -3,17 +3,16 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
-
-	"github.com/shahin-bayat/lokl/internal/version"
 )
 
 const defaultConfigFile = "lokl.yaml"
 
-var configFile string
+var (
+	configFile   string
+	buildVersion = "dev"
+)
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
@@ -25,7 +24,7 @@ var rootCmd = &cobra.Command{
 	Use:     "lokl",
 	Short:   "Local development environment orchestrator",
 	Long:    "lokl - Define and run your local development environment with a single command.",
-	Version: version.Version,
+	Version: buildVersion,
 }
 
 var downCmd = &cobra.Command{
@@ -50,10 +49,4 @@ var statusCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfigFile, "config file path")
 	rootCmd.AddCommand(upCmd, downCmd, statusCmd, dnsCmd, initCmd, validateCmd)
-}
-
-func waitForSignal() {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
 }
