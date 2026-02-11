@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func Validate(cfg *Config) error {
+func validate(cfg *Config) error {
 	if cfg.Name == "" {
 		return fmt.Errorf("name is required")
 	}

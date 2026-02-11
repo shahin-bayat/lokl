@@ -3,16 +3,18 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shahin-bayat/lokl/internal/config"
 	"github.com/shahin-bayat/lokl/internal/docker"
-	"github.com/shahin-bayat/lokl/internal/logger"
 	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
 	"github.com/shahin-bayat/lokl/internal/supervisor"
 	"github.com/shahin-bayat/lokl/internal/tui"
+	"github.com/shahin-bayat/lokl/internal/types"
 )
 
 var detach bool
@@ -45,33 +47,29 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	processFactory := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
+	pf := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
 		if svc.Image != "" {
 			return docker.NewContainer(name, svc, dockerClient, onChange)
 		}
 		return process.New(name, svc, onChange)
 	}
 
-	log := logger.New(os.Stdout)
-	prx := proxy.New(cfg)
+	pm := proxy.New(cfg)
+	sup := supervisor.New(cfg, pf, pm)
 
-	if cfg.Proxy.Domain != "" {
-		if unresolved := prx.UnresolvedDomains(); len(unresolved) > 0 {
-			log.Infof("⚠ DNS not configured for %s\n", cfg.Proxy.Domain)
-			log.Infof("  Run: sudo lokl dns setup\n\n")
-		}
+	if detach {
+		go printEvents(sup.Subscribe())
 	}
-
-	sup := supervisor.New(cfg, processFactory, prx, log)
 
 	if err := sup.Start(); err != nil {
 		return err
 	}
 
 	if detach {
-		log.Infof("\nPress Ctrl+C to stop\n")
-		waitForSignal()
-		log.Infof("\nShutting down...\n")
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		signal.Stop(sigCh)
 	} else {
 		app := tui.New(sup)
 		if err := app.Run(); err != nil {
@@ -81,4 +79,23 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	return sup.Stop()
+}
+
+func printEvents(ch <-chan types.Event) {
+	for ev := range ch {
+		switch ev.Type {
+		case types.EventProgress:
+			if ev.Service != "" {
+				fmt.Fprintf(os.Stderr, "✓ %s: %s\n", ev.Service, ev.Message)
+			} else {
+				fmt.Fprintf(os.Stderr, "✓ %s\n", ev.Message)
+			}
+		case types.EventError:
+			if ev.Service != "" {
+				fmt.Fprintf(os.Stderr, "✗ %s: %s\n", ev.Service, ev.Message)
+			} else {
+				fmt.Fprintf(os.Stderr, "✗ %s\n", ev.Message)
+			}
+		}
+	}
 }

@@ -20,12 +20,9 @@ func (c *certManager) ensureCA() error {
 		return err
 	}
 
-	cmd := exec.Command("mkcert", "-install")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("installing mkcert CA: %w", err)
+	out, err := exec.Command("mkcert", "-install").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("installing mkcert CA: %s: %w", out, err)
 	}
 
 	return nil
@@ -48,16 +45,13 @@ func (c *certManager) generate(domain string) (certPath, keyPath string, err err
 	}
 
 	wildcard := "*." + domain
-	cmd := exec.Command("mkcert",
+	out, err := exec.Command("mkcert",
 		"-cert-file", certPath,
 		"-key-file", keyPath,
 		wildcard, domain,
-	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", "", fmt.Errorf("generating certificate: %w", err)
+	).CombinedOutput()
+	if err != nil {
+		return "", "", fmt.Errorf("generating certificate: %s: %w", out, err)
 	}
 
 	return certPath, keyPath, nil

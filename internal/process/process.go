@@ -78,6 +78,8 @@ func (p *Process) Start() error {
 
 	p.state = stateStarting
 
+	// exec replaces the shell so there's one process to manage, not sh + child.
+	// Setpgid isolates the process tree for clean group-kill on shutdown.
 	p.cmd = exec.Command("sh", "-c", "exec "+p.config.Command)
 	p.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
@@ -118,6 +120,8 @@ func (p *Process) Start() error {
 	p.exitCh = make(chan struct{})
 	p.onChange()
 
+	// Reaper: waits for process exit (crash or signal), updates state,
+	// cancels health checks, and signals exitCh so Stop() can unblock.
 	go func() {
 		_ = p.cmd.Wait()
 		_ = pr.Close()

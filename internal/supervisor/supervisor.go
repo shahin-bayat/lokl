@@ -2,7 +2,9 @@
 package supervisor
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -34,6 +36,15 @@ type ProxyManager interface {
 	IsServiceProxyEnabled(name string) bool
 }
 
+type DNSNotConfiguredError struct {
+	Domains []string
+}
+
+func (e *DNSNotConfiguredError) Error() string {
+	return fmt.Sprintf("DNS not configured for: %s\nRun: sudo lokl dns setup",
+		strings.Join(e.Domains, ", "))
+}
+
 const eventBufferSize = 100
 
 // ProcessFactory creates a new process runner.
@@ -44,47 +55,33 @@ type Supervisor struct {
 	proxyManager   ProxyManager
 	processFactory ProcessFactory
 	processes      map[string]ProcessRunner
-	log            Logger
 	events         chan types.Event
 }
 
-func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager, log Logger) *Supervisor {
+func New(cfg *config.Config, pf ProcessFactory, pm ProxyManager) *Supervisor {
 	return &Supervisor{
 		cfg:            cfg,
 		proxyManager:   pm,
 		processFactory: pf,
 		processes:      make(map[string]ProcessRunner),
-		log:            log,
 		events:         make(chan types.Event, eventBufferSize),
 	}
 }
 
-func (s *Supervisor) Subscribe() <-chan types.Event {
-	return s.events
-}
-
-func (s *Supervisor) emit(service string) {
-	select {
-	case s.events <- types.Event{Service: service}:
-	default:
-		// channel full, drop event
-	}
-}
-
 func (s *Supervisor) Start() error {
-	// 1. Setup proxy (certs, DNS)
-	if err := s.setupProxy(); err != nil {
-		return err
+	if s.cfg.Proxy.Domain != "" {
+		if err := s.setupProxy(); err != nil {
+			return err
+		}
 	}
 
-	// 2. Start services in dependency order
-	order, err := config.SortByDependency(s.cfg.Services)
+	sorted, err := config.SortByDependency(s.cfg.Services)
 	if err != nil {
 		return fmt.Errorf("resolving dependencies: %w", err)
 	}
 
 	var started []string
-	for _, name := range order {
+	for _, name := range sorted {
 		svc := s.cfg.Services[name]
 
 		if svc.AutoStart != nil && !*svc.AutoStart {
@@ -96,24 +93,38 @@ func (s *Supervisor) Start() error {
 			return err
 		}
 		started = append(started, name)
-		s.log.Infof("✓ Started %s\n", name)
+		s.emit(types.Event{Type: types.EventProgress, Service: name, Message: "started"})
 	}
 
-	// 3. Start proxy server
-	if err := s.startProxy(); err != nil {
-		s.cleanupStarted(started)
-		return err
+	if s.cfg.Proxy.Domain != "" {
+		if err := s.startProxy(); err != nil {
+			s.cleanupStarted(started)
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (s *Supervisor) cleanupStarted(names []string) {
-	for _, name := range slices.Backward(names) {
+func (s *Supervisor) Stop() error {
+	for name := range s.processes {
 		if err := s.StopService(name); err != nil {
-			s.log.Errorf("✗ Cleanup failed for %s: %v\n", name, err)
+			s.emit(types.Event{Type: types.EventError, Service: name, Message: fmt.Sprintf("failed to stop: %v", err)})
+		} else {
+			s.emit(types.Event{Type: types.EventProgress, Service: name, Message: "stopped"})
 		}
 	}
+
+	if err := s.proxyManager.Stop(false); err != nil {
+		return fmt.Errorf("stopping proxy: %w", err)
+	}
+
+	close(s.events)
+	return nil
+}
+
+func (s *Supervisor) Subscribe() <-chan types.Event {
+	return s.events
 }
 
 func (s *Supervisor) StartService(name string) error {
@@ -127,7 +138,7 @@ func (s *Supervisor) StartService(name string) error {
 	}
 
 	onChange := func() {
-		s.emit(name)
+		s.emit(types.Event{Type: types.EventServiceStateChanged, Service: name})
 	}
 	p := s.processFactory(name, svc, onChange)
 	if err := p.Start(); err != nil {
@@ -135,22 +146,6 @@ func (s *Supervisor) StartService(name string) error {
 	}
 
 	s.processes[name] = p
-	return nil
-}
-
-func (s *Supervisor) Stop() error {
-	for name := range s.processes {
-		if err := s.StopService(name); err != nil {
-			s.log.Errorf("✗ Failed to stop %s: %v\n", name, err)
-		} else {
-			s.log.Infof("✓ Stopped %s\n", name)
-		}
-	}
-
-	if err := s.proxyManager.Stop(false); err != nil {
-		return fmt.Errorf("stopping proxy: %w", err)
-	}
-
 	return nil
 }
 
@@ -182,9 +177,7 @@ func (s *Supervisor) ToggleProxy(name string) (bool, error) {
 	}
 
 	if s.proxyManager.IsServiceProxyEnabled(name) {
-		if !s.proxyManager.DisableServiceProxy(name) {
-			return false, fmt.Errorf("service %s has no proxy route", name)
-		}
+		s.proxyManager.DisableServiceProxy(name)
 		return false, nil
 	}
 
@@ -194,26 +187,11 @@ func (s *Supervisor) ToggleProxy(name string) (bool, error) {
 	return true, nil
 }
 
-// serviceDomain returns the full domain for a service, handling both
-// simple subdomains (api -> api.example.com) and full domains (api.example.com).
-func (s *Supervisor) serviceDomain(svc config.Service) string {
-	if svc.Subdomain == "" {
-		return ""
-	}
-	if strings.Contains(svc.Subdomain, ".") {
-		return svc.Subdomain
-	}
-	if s.cfg.Proxy.Domain == "" {
-		return ""
-	}
-	return svc.Subdomain + "." + s.cfg.Proxy.Domain
-}
-
 func (s *Supervisor) Services() []types.ServiceInfo {
-	order, _ := config.SortByDependency(s.cfg.Services)
+	sorted, _ := config.SortByDependency(s.cfg.Services)
 
-	items := make([]types.ServiceInfo, 0, len(order))
-	for _, name := range order {
+	items := make([]types.ServiceInfo, 0, len(sorted))
+	for _, name := range sorted {
 		svc := s.cfg.Services[name]
 		item := types.ServiceInfo{
 			Name: name,
@@ -252,43 +230,58 @@ func (s *Supervisor) ServiceLogs(name string) []string {
 	return nil
 }
 
-func (s *Supervisor) setupProxy() error {
-	if s.cfg.Proxy.Domain == "" {
-		return nil
+func (s *Supervisor) emit(ev types.Event) {
+	select {
+	case s.events <- ev:
+	default:
 	}
+}
 
-	s.log.Infof("Setting up proxy...\n")
+func (s *Supervisor) cleanupStarted(names []string) {
+	for _, name := range slices.Backward(names) {
+		if err := s.StopService(name); err != nil {
+			s.emit(types.Event{Type: types.EventError, Service: name, Message: fmt.Sprintf("cleanup failed: %v", err)})
+		}
+	}
+}
+
+func (s *Supervisor) serviceDomain(svc config.Service) string {
+	if svc.Subdomain == "" {
+		return ""
+	}
+	if strings.Contains(svc.Subdomain, ".") {
+		return svc.Subdomain
+	}
+	if s.cfg.Proxy.Domain == "" {
+		return ""
+	}
+	return svc.Subdomain + "." + s.cfg.Proxy.Domain
+}
+
+func (s *Supervisor) setupProxy() error {
+	s.emit(types.Event{Type: types.EventProgress, Message: "setting up proxy"})
 
 	if err := s.proxyManager.Setup(); err != nil {
 		return fmt.Errorf("proxy setup: %w", err)
 	}
-	s.log.Infof("✓ Certificates ready in %s\n", s.proxyManager.CertDir())
+	s.emit(types.Event{Type: types.EventProgress, Message: fmt.Sprintf("certificates ready in %s", s.proxyManager.CertDir())})
 
 	unresolved := s.proxyManager.UnresolvedDomains()
 	if len(unresolved) > 0 {
-		s.log.Infof("\n⚠ DNS entries needed for: %s\n", strings.Join(unresolved, ", "))
-		s.log.Infof("\nOption 1 - Run:\n")
-		s.log.Infof("  sudo lokl dns setup\n")
-		s.log.Infof("\nOption 2 - Add manually to /etc/hosts:\n")
-		s.log.Infof("  %s\n", strings.ReplaceAll(s.proxyManager.DNSBlock(), "\n", "\n  "))
-		return fmt.Errorf("DNS not configured")
+		return &DNSNotConfiguredError{Domains: unresolved}
 	}
 
-	s.log.Infof("✓ DNS configured for %d domains\n", len(s.proxyManager.Domains()))
+	s.emit(types.Event{Type: types.EventProgress, Message: fmt.Sprintf("DNS configured for %d domains", len(s.proxyManager.Domains()))})
 	return nil
 }
 
 func (s *Supervisor) startProxy() error {
-	if s.cfg.Proxy.Domain == "" {
-		return nil
-	}
-
 	go func() {
-		if err := s.proxyManager.Start(); err != nil && err.Error() != "http: Server closed" {
-			s.log.Errorf("✗ Proxy error: %v\n", err)
+		if err := s.proxyManager.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.emit(types.Event{Type: types.EventError, Message: fmt.Sprintf("proxy: %v", err)})
 		}
 	}()
 
-	s.log.Infof("✓ Proxy listening on :%d\n", s.proxyManager.Port())
+	s.emit(types.Event{Type: types.EventProgress, Message: fmt.Sprintf("proxy listening on :%d", s.proxyManager.Port())})
 	return nil
 }

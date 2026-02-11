@@ -2,7 +2,7 @@
 
 BINARY=lokl
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS=-ldflags "-X github.com/shahin-bayat/lokl/internal/version.Version=$(VERSION)"
+LDFLAGS=-ldflags "-X main.buildVersion=$(VERSION)"
 LOCAL_PREFIX=github.com/shahin-bayat/lokl
 
 build:

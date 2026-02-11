@@ -110,8 +110,10 @@ func (p *Proxy) Domains() []string {
 }
 
 func (p *Proxy) CertDir() string {
-	abs, _ := filepath.Abs(defaultCertDir)
-	return abs
+	if abs, err := filepath.Abs(defaultCertDir); err == nil {
+		return abs
+	}
+	return defaultCertDir
 }
 
 func (p *Proxy) NeedsSudo() bool {
