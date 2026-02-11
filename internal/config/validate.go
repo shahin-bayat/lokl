@@ -208,6 +208,10 @@ func checkDuplicateSubdomains(cfg *Config) error {
 		}
 		k := key{fqdn, prefix}
 		if existing, ok := seen[k]; ok {
+			if prefix == "" {
+				return fmt.Errorf("services %q and %q: same subdomain with no prefix",
+					existing, name)
+			}
 			return fmt.Errorf("services %q and %q: same subdomain with same prefix %q",
 				existing, name, prefix)
 		}

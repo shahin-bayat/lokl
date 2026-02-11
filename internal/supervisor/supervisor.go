@@ -223,8 +223,10 @@ func (s *Supervisor) Services() []types.ServiceInfo {
 		if domain := s.serviceDomain(svc); domain != "" {
 			item.Domain = domain
 			item.ProxyEnabled = s.proxyManager.IsServiceProxyEnabled(name)
-			if svc.Rewrite != nil && svc.Rewrite.StripPrefix != "" {
-				item.PathPrefix = "/" + svc.Rewrite.StripPrefix
+			if svc.Rewrite != nil {
+				if trimmed := strings.Trim(svc.Rewrite.StripPrefix, "/"); trimmed != "" {
+					item.PathPrefix = "/" + trimmed
+				}
 			}
 		}
 

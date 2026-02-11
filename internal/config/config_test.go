@@ -219,7 +219,7 @@ func TestValidate(t *testing.T) {
 					"b": {Command: "y", Subdomain: "client", Port: 8081},
 				},
 			},
-			wantErr: "same subdomain with same prefix",
+			wantErr: "same subdomain with no prefix",
 		},
 		{
 			name: "shared subdomain different prefix",
