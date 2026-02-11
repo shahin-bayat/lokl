@@ -45,7 +45,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	processFactory := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
+	pf := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
 		if svc.Image != "" {
 			return docker.NewContainer(name, svc, dockerClient, onChange)
 		}
@@ -53,16 +53,16 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	log := logger.New(os.Stdout)
-	prx := proxy.New(cfg)
+	pm := proxy.New(cfg)
 
 	if cfg.Proxy.Domain != "" {
-		if unresolved := prx.UnresolvedDomains(); len(unresolved) > 0 {
+		if unresolved := pm.UnresolvedDomains(); len(unresolved) > 0 {
 			log.Infof("⚠ DNS not configured for %s\n", cfg.Proxy.Domain)
 			log.Infof("  Run: sudo lokl dns setup\n\n")
 		}
 	}
 
-	sup := supervisor.New(cfg, processFactory, prx, log)
+	sup := supervisor.New(cfg, pf, pm, log)
 
 	if err := sup.Start(); err != nil {
 		return err
