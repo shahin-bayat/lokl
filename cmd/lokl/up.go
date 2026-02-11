@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -55,16 +57,17 @@ func runUp(cmd *cobra.Command, args []string) error {
 	log := logger.New(os.Stdout)
 	pm := proxy.New(cfg)
 
-	if cfg.Proxy.Domain != "" {
-		if unresolved := pm.UnresolvedDomains(); len(unresolved) > 0 {
-			log.Infof("⚠ DNS not configured for %s\n", cfg.Proxy.Domain)
-			log.Infof("  Run: sudo lokl dns setup\n\n")
-		}
-	}
-
 	sup := supervisor.New(cfg, pf, pm, log)
 
 	if err := sup.Start(); err != nil {
+		var dnsErr *supervisor.DNSNotConfiguredError
+		if errors.As(err, &dnsErr) {
+			log.Infof("\n⚠ DNS entries needed for: %s\n", strings.Join(dnsErr.Domains, ", "))
+			log.Infof("\nOption 1 - Run:\n")
+			log.Infof("  sudo lokl dns setup\n")
+			log.Infof("\nOption 2 - Add manually to /etc/hosts:\n")
+			log.Infof("  %s\n", strings.ReplaceAll(dnsErr.DNSBlock, "\n", "\n  "))
+		}
 		return err
 	}
 
