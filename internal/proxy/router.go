@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"sort"
 	"strings"
 	"sync/atomic"
 
@@ -8,6 +9,7 @@ import (
 )
 
 type route struct {
+	name    string
 	domain  string
 	port    int
 	rewrite *rewriteConfig
@@ -21,16 +23,18 @@ type rewriteConfig struct {
 
 type router struct {
 	baseDomain string
-	routes     map[string]*route
+	byHost     map[string][]*route
+	byName     map[string]*route
 }
 
 func newRouter(cfg *config.Config) *router {
 	r := &router{
 		baseDomain: cfg.Proxy.Domain,
-		routes:     make(map[string]*route),
+		byHost:     make(map[string][]*route),
+		byName:     make(map[string]*route),
 	}
 
-	for _, svc := range cfg.Services {
+	for name, svc := range cfg.Services {
 		if svc.Subdomain == "" || svc.Port == 0 {
 			continue
 		}
@@ -41,6 +45,7 @@ func newRouter(cfg *config.Config) *router {
 		}
 
 		rt := &route{
+			name:   name,
 			domain: fqdn,
 			port:   svc.Port,
 		}
@@ -48,33 +53,65 @@ func newRouter(cfg *config.Config) *router {
 
 		if svc.Rewrite != nil {
 			rt.rewrite = &rewriteConfig{
-				stripPrefix: svc.Rewrite.StripPrefix,
+				stripPrefix: strings.Trim(svc.Rewrite.StripPrefix, "/"),
 				fallback:    svc.Rewrite.Fallback,
 			}
 		}
 
-		r.routes[fqdn] = rt
+		r.byHost[fqdn] = append(r.byHost[fqdn], rt)
+		r.byName[name] = rt
+	}
+
+	for _, routes := range r.byHost {
+		sort.Slice(routes, func(i, j int) bool {
+			return prefixLen(routes[i]) > prefixLen(routes[j])
+		})
 	}
 
 	return r
 }
 
-func (r *router) match(host string) *route {
+func prefixLen(rt *route) int {
+	if rt.rewrite == nil {
+		return 0
+	}
+	return len(rt.rewrite.stripPrefix)
+}
+
+func (r *router) match(host, path string) *route {
 	if idx := strings.LastIndex(host, ":"); idx != -1 {
 		host = host[:idx]
 	}
 
-	rt, ok := r.routes[host]
-	if !ok {
+	routes := r.byHost[host]
+	if len(routes) == 0 {
 		return nil
 	}
-	// Return route even when disabled - handler decides local vs remote
-	return rt
+	if len(routes) == 1 {
+		return routes[0]
+	}
+
+	for _, rt := range routes {
+		if rt.rewrite != nil && rt.rewrite.stripPrefix != "" {
+			prefix := "/" + rt.rewrite.stripPrefix
+			if path == prefix || strings.HasPrefix(path, prefix+"/") {
+				return rt
+			}
+		}
+	}
+
+	for _, rt := range routes {
+		if rt.rewrite == nil || rt.rewrite.stripPrefix == "" {
+			return rt
+		}
+	}
+
+	return nil
 }
 
 func (r *router) domains() []string {
-	domains := make([]string, 0, len(r.routes))
-	for domain := range r.routes {
+	domains := make([]string, 0, len(r.byHost))
+	for domain := range r.byHost {
 		domains = append(domains, domain)
 	}
 	return domains
@@ -82,9 +119,12 @@ func (r *router) domains() []string {
 
 func (r *router) enabledDomains() []string {
 	var domains []string
-	for domain, rt := range r.routes {
-		if rt.enabled.Load() {
-			domains = append(domains, domain)
+	for domain, routes := range r.byHost {
+		for _, rt := range routes {
+			if rt.enabled.Load() {
+				domains = append(domains, domain)
+				break
+			}
 		}
 	}
 	return domains
@@ -94,8 +134,8 @@ func (r *router) domain() string {
 	return r.baseDomain
 }
 
-func (r *router) setEnabled(domain string, enabled bool) bool {
-	rt, ok := r.routes[domain]
+func (r *router) setEnabled(name string, enabled bool) bool {
+	rt, ok := r.byName[name]
 	if !ok {
 		return false
 	}
