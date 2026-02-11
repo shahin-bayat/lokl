@@ -58,17 +58,17 @@ func (m *mockRunner) Logs() []string {
 var _ ProxyManager = (*mockProxy)(nil)
 
 type mockProxy struct {
-	SetupFn             func() error
-	StartFn             func() error
-	StopFn              func(bool) error
-	CertDirFn           func() string
-	PortFn              func() int
-	DomainsFn           func() []string
-	UnresolvedDomainsFn func() []string
-	DNSBlockFn          func() string
-	EnableProxyFn       func(string) bool
-	DisableProxyFn      func(string) bool
-	IsProxyEnabledFn    func(string) bool
+	SetupFn                 func() error
+	StartFn                 func() error
+	StopFn                  func(bool) error
+	CertDirFn               func() string
+	PortFn                  func() int
+	DomainsFn               func() []string
+	UnresolvedDomainsFn     func() []string
+	DNSBlockFn              func() string
+	EnableServiceProxyFn    func(string) bool
+	DisableServiceProxyFn   func(string) bool
+	IsServiceProxyEnabledFn func(string) bool
 }
 
 func (m *mockProxy) Setup() error {
@@ -127,23 +127,23 @@ func (m *mockProxy) DNSBlock() string {
 	return ""
 }
 
-func (m *mockProxy) EnableProxy(domain string) bool {
-	if m.EnableProxyFn != nil {
-		return m.EnableProxyFn(domain)
+func (m *mockProxy) EnableServiceProxy(name string) bool {
+	if m.EnableServiceProxyFn != nil {
+		return m.EnableServiceProxyFn(name)
 	}
 	return true
 }
 
-func (m *mockProxy) DisableProxy(domain string) bool {
-	if m.DisableProxyFn != nil {
-		return m.DisableProxyFn(domain)
+func (m *mockProxy) DisableServiceProxy(name string) bool {
+	if m.DisableServiceProxyFn != nil {
+		return m.DisableServiceProxyFn(name)
 	}
 	return true
 }
 
-func (m *mockProxy) IsProxyEnabled(domain string) bool {
-	if m.IsProxyEnabledFn != nil {
-		return m.IsProxyEnabledFn(domain)
+func (m *mockProxy) IsServiceProxyEnabled(name string) bool {
+	if m.IsServiceProxyEnabledFn != nil {
+		return m.IsServiceProxyEnabledFn(name)
 	}
 	return true
 }
@@ -460,9 +460,9 @@ func TestStop(t *testing.T) {
 func TestToggleProxy(t *testing.T) {
 	enabled := true
 	proxy := &mockProxy{
-		IsProxyEnabledFn: func(_ string) bool { return enabled },
-		DisableProxyFn:   func(_ string) bool { enabled = false; return true },
-		EnableProxyFn:    func(_ string) bool { enabled = true; return true },
+		IsServiceProxyEnabledFn: func(_ string) bool { return enabled },
+		DisableServiceProxyFn:   func(_ string) bool { enabled = false; return true },
+		EnableServiceProxyFn:    func(_ string) bool { enabled = true; return true },
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
@@ -499,15 +499,20 @@ func TestToggleProxyUnknown(t *testing.T) {
 	}
 }
 
-func TestToggleProxyNoDomain(t *testing.T) {
+func TestToggleProxyNoRoute(t *testing.T) {
+	proxy := &mockProxy{
+		IsServiceProxyEnabledFn: func(_ string) bool { return false },
+		EnableServiceProxyFn:    func(_ string) bool { return false },
+	}
+
 	cfg := simpleConfig(map[string]config.Service{
 		"web": {Command: "npm start"},
 	})
-	s := newTestSupervisor(cfg, nil, nil)
+	s := newTestSupervisor(cfg, nil, proxy)
 
 	_, err := s.ToggleProxy("web")
 	if err == nil {
-		t.Fatal("expected error for service without subdomain")
+		t.Fatal("expected error for service without proxy route")
 	}
 }
 
@@ -520,7 +525,7 @@ func TestServices(t *testing.T) {
 	}
 
 	proxy := &mockProxy{
-		IsProxyEnabledFn: func(_ string) bool { return true },
+		IsServiceProxyEnabledFn: func(_ string) bool { return true },
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
@@ -556,7 +561,7 @@ func TestServices(t *testing.T) {
 
 func TestServicesWithPathPrefix(t *testing.T) {
 	proxy := &mockProxy{
-		IsProxyEnabledFn: func(_ string) bool { return true },
+		IsServiceProxyEnabledFn: func(_ string) bool { return true },
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
