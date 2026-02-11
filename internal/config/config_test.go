@@ -210,6 +210,30 @@ func TestValidate(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "shared subdomain same prefix",
+			cfg: Config{
+				Name:  "test",
+				Proxy: ProxyConfig{Domain: "test.dev"},
+				Services: map[string]Service{
+					"a": {Command: "x", Subdomain: "client", Port: 8080},
+					"b": {Command: "y", Subdomain: "client", Port: 8081},
+				},
+			},
+			wantErr: "same subdomain with no prefix",
+		},
+		{
+			name: "shared subdomain different prefix",
+			cfg: Config{
+				Name:  "test",
+				Proxy: ProxyConfig{Domain: "test.dev"},
+				Services: map[string]Service{
+					"a": {Command: "x", Subdomain: "client", Port: 8080, Rewrite: &RewriteConfig{StripPrefix: "app-a"}},
+					"b": {Command: "y", Subdomain: "client", Port: 8081, Rewrite: &RewriteConfig{StripPrefix: "app-b"}},
+				},
+			},
+			wantErr: "",
+		},
+		{
 			name: "valid config",
 			cfg: Config{
 				Name:     "test",

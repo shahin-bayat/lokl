@@ -26,6 +26,10 @@ func Validate(cfg *Config) error {
 		return err
 	}
 
+	if err := checkDuplicateSubdomains(cfg); err != nil {
+		return err
+	}
+
 	for name, svc := range cfg.Services {
 		if err := validateService(name, &svc, cfg.Services); err != nil {
 			return err
@@ -183,6 +187,35 @@ func parsePortMapping(s string) (host, container int, err error) {
 func validatePortNumber(port int) error {
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("port %d out of range (1-65535)", port)
+	}
+	return nil
+}
+
+func checkDuplicateSubdomains(cfg *Config) error {
+	type key struct{ fqdn, prefix string }
+	seen := make(map[key]string)
+	for name, svc := range cfg.Services {
+		if svc.Subdomain == "" {
+			continue
+		}
+		fqdn := svc.Subdomain
+		if !strings.Contains(fqdn, ".") && cfg.Proxy.Domain != "" {
+			fqdn = svc.Subdomain + "." + cfg.Proxy.Domain
+		}
+		prefix := ""
+		if svc.Rewrite != nil {
+			prefix = strings.Trim(svc.Rewrite.StripPrefix, "/")
+		}
+		k := key{fqdn, prefix}
+		if existing, ok := seen[k]; ok {
+			if prefix == "" {
+				return fmt.Errorf("services %q and %q: same subdomain with no prefix",
+					existing, name)
+			}
+			return fmt.Errorf("services %q and %q: same subdomain with same prefix %q",
+				existing, name, prefix)
+		}
+		seen[k] = name
 	}
 	return nil
 }

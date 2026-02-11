@@ -105,7 +105,7 @@ func (h *handler) remoteTransport(host string) http.RoundTripper {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	rt := h.router.match(r.Host)
+	rt := h.router.match(r.Host, r.URL.Path)
 	if rt == nil {
 		http.Error(w, "service not found", http.StatusNotFound)
 		return

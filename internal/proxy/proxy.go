@@ -134,19 +134,16 @@ func (p *Proxy) RemoveDNS() error {
 	return p.hosts.remove()
 }
 
-// EnableProxy enables local proxy routing for a domain
-func (p *Proxy) EnableProxy(domain string) bool {
-	return p.router.setEnabled(domain, true)
+func (p *Proxy) EnableServiceProxy(name string) bool {
+	return p.router.setEnabled(name, true)
 }
 
-// DisableProxy disables local proxy routing (traffic goes to remote)
-func (p *Proxy) DisableProxy(domain string) bool {
-	return p.router.setEnabled(domain, false)
+func (p *Proxy) DisableServiceProxy(name string) bool {
+	return p.router.setEnabled(name, false)
 }
 
-// IsProxyEnabled returns whether local proxy routing is enabled for a domain
-func (p *Proxy) IsProxyEnabled(domain string) bool {
-	rt := p.router.match(domain)
+func (p *Proxy) IsServiceProxyEnabled(name string) bool {
+	rt := p.router.byName[name]
 	if rt == nil {
 		return false
 	}

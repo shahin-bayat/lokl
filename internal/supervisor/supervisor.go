@@ -29,9 +29,9 @@ type ProxyManager interface {
 	Domains() []string
 	UnresolvedDomains() []string
 	DNSBlock() string
-	EnableProxy(domain string) bool
-	DisableProxy(domain string) bool
-	IsProxyEnabled(domain string) bool
+	EnableServiceProxy(name string) bool
+	DisableServiceProxy(name string) bool
+	IsServiceProxyEnabled(name string) bool
 }
 
 const eventBufferSize = 100
@@ -175,24 +175,22 @@ func (s *Supervisor) RestartService(name string) error {
 	return s.StartService(name)
 }
 
-// ToggleProxy toggles between local and remote routing for a service.
 func (s *Supervisor) ToggleProxy(name string) (bool, error) {
-	svc, exists := s.cfg.Services[name]
+	_, exists := s.cfg.Services[name]
 	if !exists {
 		return false, fmt.Errorf("unknown service: %s", name)
 	}
 
-	domain := s.serviceDomain(svc)
-	if domain == "" {
-		return false, fmt.Errorf("service %s has no proxy domain", name)
-	}
-
-	if s.proxyManager.IsProxyEnabled(domain) {
-		s.proxyManager.DisableProxy(domain)
+	if s.proxyManager.IsServiceProxyEnabled(name) {
+		if !s.proxyManager.DisableServiceProxy(name) {
+			return false, fmt.Errorf("service %s has no proxy route", name)
+		}
 		return false, nil
 	}
 
-	s.proxyManager.EnableProxy(domain)
+	if !s.proxyManager.EnableServiceProxy(name) {
+		return false, fmt.Errorf("service %s has no proxy route", name)
+	}
 	return true, nil
 }
 
@@ -224,9 +222,11 @@ func (s *Supervisor) Services() []types.ServiceInfo {
 
 		if domain := s.serviceDomain(svc); domain != "" {
 			item.Domain = domain
-			item.ProxyEnabled = s.proxyManager.IsProxyEnabled(domain)
-			if svc.Rewrite != nil && svc.Rewrite.StripPrefix != "" {
-				item.PathPrefix = "/" + svc.Rewrite.StripPrefix
+			item.ProxyEnabled = s.proxyManager.IsServiceProxyEnabled(name)
+			if svc.Rewrite != nil {
+				if trimmed := strings.Trim(svc.Rewrite.StripPrefix, "/"); trimmed != "" {
+					item.PathPrefix = "/" + trimmed
+				}
 			}
 		}
 
