@@ -19,21 +19,24 @@ const (
 )
 
 type Proxy struct {
-	cfg    *config.Config
-	router *router
-	certs  *certManager
-	hosts  *hostsManager
-	server *http.Server
-	port   int
+	cfg     *config.Config
+	router  *router
+	certs   *certManager
+	hosts   *hostsManager
+	handler *handler
+	server  *http.Server
+	port    int
 }
 
 func New(cfg *config.Config) *Proxy {
+	r := newRouter(cfg)
 	return &Proxy{
-		cfg:    cfg,
-		router: newRouter(cfg),
-		certs:  newCertManager(defaultCertDir),
-		hosts:  newHostsManager(cfg.Name),
-		port:   defaultPort,
+		cfg:     cfg,
+		router:  r,
+		certs:   newCertManager(defaultCertDir),
+		hosts:   newHostsManager(cfg.Name),
+		handler: newHandler(r),
+		port:    defaultPort,
 	}
 }
 
@@ -64,11 +67,9 @@ func (p *Proxy) Start() error {
 		return fmt.Errorf("loading certificate: %w", err)
 	}
 
-	handler := newHandler(p.router)
-
 	p.server = &http.Server{
 		Addr:    fmt.Sprintf("0.0.0.0:%d", p.port),
-		Handler: handler,
+		Handler: p.handler,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		},
@@ -137,10 +138,16 @@ func (p *Proxy) RemoveDNS() error {
 }
 
 func (p *Proxy) EnableServiceProxy(name string) bool {
+	if rt := p.router.byName[name]; rt != nil {
+		p.handler.invalidateCache(rt.domain)
+	}
 	return p.router.setEnabled(name, true)
 }
 
 func (p *Proxy) DisableServiceProxy(name string) bool {
+	if rt := p.router.byName[name]; rt != nil {
+		p.handler.invalidateCache(rt.domain)
+	}
 	return p.router.setEnabled(name, false)
 }
 

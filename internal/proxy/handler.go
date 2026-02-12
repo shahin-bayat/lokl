@@ -41,6 +41,12 @@ func newHandler(router *router) *handler {
 	}
 }
 
+func (h *handler) invalidateCache(domain string) {
+	h.dnsMu.Lock()
+	delete(h.dnsCache, domain)
+	h.dnsMu.Unlock()
+}
+
 // resolveViaDNS queries external DNS directly, bypassing /etc/hosts
 func (h *handler) resolveViaDNS(host string) (string, error) {
 	h.dnsMu.RLock()
@@ -72,10 +78,10 @@ func (h *handler) resolveViaDNS(host string) (string, error) {
 	return "", fmt.Errorf("no A record found for %s", host)
 }
 
-func (h *handler) remoteTransport(host string) http.RoundTripper {
+func (h *handler) remoteTransport(host string) (http.RoundTripper, error) {
 	ip, err := h.resolveViaDNS(host)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("resolving %s: %w", host, err)
 	}
 
 	dialer := &net.Dialer{Timeout: dialTimeout}
@@ -101,7 +107,22 @@ func (h *handler) remoteTransport(host string) http.RoundTripper {
 		IdleConnTimeout:       idleTimeout,
 		TLSHandshakeTimeout:   tlsTimeout,
 		ExpectContinueTimeout: continueTimout,
+	}, nil
+}
+
+func (h *handler) selectTarget(rt *route, r *http.Request) (target *url.URL, transport http.RoundTripper, remote bool, err error) {
+	if rt.enabled.Load() {
+		if rt.rewrite != nil {
+			r.URL.Path = rewritePath(r.URL.Path, rt.rewrite)
+		}
+		return &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", rt.port)}, nil, false, nil
 	}
+
+	transport, err = h.remoteTransport(rt.domain)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return &url.URL{Scheme: "https", Host: rt.domain}, transport, true, nil
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -111,35 +132,17 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var target *url.URL
-	var transport http.RoundTripper
-
-	if rt.enabled.Load() {
-		if rt.rewrite != nil {
-			r.URL.Path = rewritePath(r.URL.Path, rt.rewrite)
-		}
-		target = &url.URL{
-			Scheme: "http",
-			Host:   fmt.Sprintf("localhost:%d", rt.port),
-		}
-	} else {
-		target = &url.URL{
-			Scheme: "https",
-			Host:   rt.domain,
-		}
-		transport = h.remoteTransport(rt.domain)
-		if transport == nil {
-			http.Error(w, "failed to resolve remote host", http.StatusBadGateway)
-			return
-		}
+	target, transport, remote, err := h.selectTarget(rt, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
 	}
 
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
-			if !rt.enabled.Load() {
-				// Only set Host header for remote - local services expect original host
+			if remote {
 				req.Host = target.Host
 			}
 		},
@@ -148,23 +151,21 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
 		},
 		ModifyResponse: func(resp *http.Response) error {
-			// Bust cache so toggle takes effect immediately
 			resp.Header.Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 			resp.Header.Set("Pragma", "no-cache")
 			resp.Header.Set("Expires", "0")
 			resp.Header.Del("ETag")
 			resp.Header.Del("Last-Modified")
 
-			if rt.enabled.Load() {
-				resp.Header.Set("X-Lokl-Proxy", "local")
-			} else {
+			if remote {
 				resp.Header.Set("X-Lokl-Proxy", "remote")
+			} else {
+				resp.Header.Set("X-Lokl-Proxy", "local")
 			}
 			return nil
 		},
 	}
 
-	// Preserve original host for backends that check it
 	r.Header.Set("X-Forwarded-Host", r.Host)
 	r.Header.Set("X-Forwarded-Proto", "https")
 
