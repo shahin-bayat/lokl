@@ -41,10 +41,72 @@ func newHandler(router *router) *handler {
 	}
 }
 
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	rt := h.router.match(r.Host, r.URL.Path)
+	if rt == nil {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+
+	target, transport, remote, err := h.selectTarget(rt, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = target.Scheme
+			req.URL.Host = target.Host
+			if remote {
+				req.Host = target.Host
+			}
+		},
+		Transport: transport,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			resp.Header.Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+			resp.Header.Set("Pragma", "no-cache")
+			resp.Header.Set("Expires", "0")
+			resp.Header.Del("ETag")
+			resp.Header.Del("Last-Modified")
+
+			if remote {
+				resp.Header.Set("X-Lokl-Proxy", "remote")
+			} else {
+				resp.Header.Set("X-Lokl-Proxy", "local")
+			}
+			return nil
+		},
+	}
+
+	r.Header.Set("X-Forwarded-Host", r.Host)
+	r.Header.Set("X-Forwarded-Proto", "https")
+
+	proxy.ServeHTTP(w, r)
+}
+
 func (h *handler) invalidateCache(domain string) {
 	h.dnsMu.Lock()
 	delete(h.dnsCache, domain)
 	h.dnsMu.Unlock()
+}
+
+func (h *handler) selectTarget(rt *route, r *http.Request) (target *url.URL, transport http.RoundTripper, remote bool, err error) {
+	if rt.enabled.Load() {
+		if rt.rewrite != nil {
+			r.URL.Path = rewritePath(r.URL.Path, rt.rewrite)
+		}
+		return &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", rt.port)}, nil, false, nil
+	}
+
+	transport, err = h.remoteTransport(rt.domain)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return &url.URL{Scheme: "https", Host: rt.domain}, transport, true, nil
 }
 
 // resolveViaDNS queries external DNS directly, bypassing /etc/hosts
@@ -110,68 +172,6 @@ func (h *handler) remoteTransport(host string) (http.RoundTripper, error) {
 	}, nil
 }
 
-func (h *handler) selectTarget(rt *route, r *http.Request) (target *url.URL, transport http.RoundTripper, remote bool, err error) {
-	if rt.enabled.Load() {
-		if rt.rewrite != nil {
-			r.URL.Path = rewritePath(r.URL.Path, rt.rewrite)
-		}
-		return &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", rt.port)}, nil, false, nil
-	}
-
-	transport, err = h.remoteTransport(rt.domain)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	return &url.URL{Scheme: "https", Host: rt.domain}, transport, true, nil
-}
-
-func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	rt := h.router.match(r.Host, r.URL.Path)
-	if rt == nil {
-		http.Error(w, "service not found", http.StatusNotFound)
-		return
-	}
-
-	target, transport, remote, err := h.selectTarget(rt, r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-
-	proxy := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
-			req.URL.Scheme = target.Scheme
-			req.URL.Host = target.Host
-			if remote {
-				req.Host = target.Host
-			}
-		},
-		Transport: transport,
-		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
-		},
-		ModifyResponse: func(resp *http.Response) error {
-			resp.Header.Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-			resp.Header.Set("Pragma", "no-cache")
-			resp.Header.Set("Expires", "0")
-			resp.Header.Del("ETag")
-			resp.Header.Del("Last-Modified")
-
-			if remote {
-				resp.Header.Set("X-Lokl-Proxy", "remote")
-			} else {
-				resp.Header.Set("X-Lokl-Proxy", "local")
-			}
-			return nil
-		},
-	}
-
-	r.Header.Set("X-Forwarded-Host", r.Host)
-	r.Header.Set("X-Forwarded-Proto", "https")
-
-	proxy.ServeHTTP(w, r)
-}
-
 func rewritePath(p string, rw *rewriteConfig) string {
 	if rw.stripPrefix != "" {
 		prefix := "/" + rw.stripPrefix
@@ -183,32 +183,13 @@ func rewritePath(p string, rw *rewriteConfig) string {
 		}
 	}
 
-	if rw.fallback != "" && !isAssetPath(p) {
+	if rw.fallback != "" && !hasFileExtension(p) {
 		return rw.fallback
 	}
 
 	return p
 }
 
-func isAssetPath(p string) bool {
-	assetPrefixes := []string{"/assets/", "/static/", "/@vite/", "/@fs/", "/__vite_ping"}
-	for _, prefix := range assetPrefixes {
-		if strings.HasPrefix(p, prefix) {
-			return true
-		}
-	}
-
-	ext := strings.ToLower(path.Ext(p))
-	assetExts := map[string]bool{
-		".js": true, ".mjs": true, ".cjs": true,
-		".css": true, ".scss": true, ".sass": true, ".less": true,
-		".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".svg": true, ".ico": true, ".webp": true,
-		".woff": true, ".woff2": true, ".ttf": true, ".eot": true,
-		".json": true, ".map": true,
-		".html": true, ".htm": true,
-		".mp4": true, ".webm": true, ".mp3": true, ".wav": true,
-		".pdf": true,
-	}
-
-	return assetExts[ext]
+func hasFileExtension(p string) bool {
+	return path.Ext(p) != ""
 }
