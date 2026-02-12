@@ -222,40 +222,32 @@ func TestHandlerResponseHeaders(t *testing.T) {
 	}
 }
 
-func TestIsAssetPath(t *testing.T) {
+func TestHasFileExtension(t *testing.T) {
 	tests := []struct {
 		path string
 		want bool
 	}{
-		// By extension
 		{"/main.js", true},
 		{"/style.css", true},
 		{"/image.png", true},
 		{"/font.woff2", true},
 		{"/data.json", true},
 		{"/page.html", true},
-		{"/app.mjs", true},
-
-		// By prefix
-		{"/assets/anything", true},
 		{"/static/file.txt", true},
-		{"/@vite/client", true},
-		{"/@fs/some/path", true},
-		{"/__vite_ping", true},
 
-		// Non-assets
 		{"/dashboard", false},
 		{"/users/123", false},
 		{"/api/data", false},
 		{"/", false},
 		{"/settings", false},
+		{"/@vite/client", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got := isAssetPath(tt.path)
+			got := hasFileExtension(tt.path)
 			if got != tt.want {
-				t.Errorf("isAssetPath(%q) = %v, want %v", tt.path, got, tt.want)
+				t.Errorf("hasFileExtension(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
 	}

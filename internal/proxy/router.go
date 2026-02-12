@@ -71,13 +71,6 @@ func newRouter(cfg *config.Config) *router {
 	return r
 }
 
-func prefixLen(rt *route) int {
-	if rt.rewrite == nil {
-		return 0
-	}
-	return len(rt.rewrite.stripPrefix)
-}
-
 func (r *router) match(host, path string) *route {
 	if idx := strings.LastIndex(host, ":"); idx != -1 {
 		host = host[:idx]
@@ -141,4 +134,11 @@ func (r *router) setEnabled(name string, enabled bool) bool {
 	}
 	rt.enabled.Store(enabled)
 	return true
+}
+
+func prefixLen(rt *route) int {
+	if rt.rewrite == nil {
+		return 0
+	}
+	return len(rt.rewrite.stripPrefix)
 }
