@@ -8,7 +8,7 @@ import (
 )
 
 // RunHealthCheck polls an HTTP endpoint and reports health state changes.
-// Blocks until ctx is cancelled. onResult is called only on transitions.
+// Blocks until ctx is canceled. onResult is called only on transitions.
 func RunHealthCheck(ctx context.Context, port int, path string, interval, timeout time.Duration, retries int, onResult func(healthy bool)) {
 	client := &http.Client{Timeout: timeout}
 	healthy := false

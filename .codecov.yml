@@ -7,7 +7,5 @@ coverage:
 ignore:
   - "cmd/lokl/"
   - "internal/tui/"
-  - "internal/logger/"
-  - "internal/version/"
   - "internal/types/"
   - "internal/docker/client.go"
