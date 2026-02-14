@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/runner"
 )
 
 const (
@@ -24,12 +24,12 @@ type Container struct {
 	name     string
 	config   config.Service
 	api      DockerAPI
-	state    state
+	state    runner.State
 	healthy  bool
 	onChange func()
 
 	containerID string
-	logs        *logs
+	logs        *runner.Logs
 	cancel      context.CancelFunc
 	mu          sync.Mutex
 }
@@ -39,7 +39,7 @@ func NewContainer(name string, cfg config.Service, api DockerAPI, onChange func(
 		name:     name,
 		config:   cfg,
 		api:      api,
-		state:    stateStopped,
+		state:    runner.StateStopped,
 		onChange: onChange,
 	}
 }
@@ -47,7 +47,7 @@ func NewContainer(name string, cfg config.Service, api DockerAPI, onChange func(
 func (c *Container) IsRunning() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.state == stateRunning
+	return c.state == runner.StateRunning
 }
 
 func (c *Container) IsHealthy() bool {
@@ -65,12 +65,12 @@ func (c *Container) Logs() []string {
 
 func (c *Container) Start() error {
 	c.mu.Lock()
-	if c.state != stateStopped && c.state != stateFailed {
+	if c.state != runner.StateStopped && c.state != runner.StateFailed {
 		c.mu.Unlock()
 		return fmt.Errorf("container %s: cannot start from state %s", c.name, c.state)
 	}
-	c.state = stateStarting
-	c.logs = newLogs(maxLogLines)
+	c.state = runner.StateStarting
+	c.logs = runner.NewLogs(maxLogLines)
 	c.mu.Unlock()
 	c.onChange()
 
@@ -127,7 +127,7 @@ func (c *Container) Start() error {
 	}
 
 	c.mu.Lock()
-	c.state = stateRunning
+	c.state = runner.StateRunning
 	c.mu.Unlock()
 	c.onChange()
 
@@ -136,18 +136,34 @@ func (c *Container) Start() error {
 
 	go c.streamLogs(runCtx, id)
 	go c.watchContainer(runCtx, id)
-	go c.startHealthCheck(runCtx)
+
+	if c.config.Health != nil && c.config.Health.Path != "" {
+		interval, _ := time.ParseDuration(c.config.Health.Interval)
+		timeout, _ := time.ParseDuration(c.config.Health.Timeout)
+		retries := *c.config.Health.Retries
+		go runner.RunHealthCheck(runCtx, c.config.Port, c.config.Health.Path, interval, timeout, retries, func(healthy bool) {
+			c.mu.Lock()
+			c.healthy = healthy
+			c.mu.Unlock()
+			c.onChange()
+		})
+	} else {
+		c.mu.Lock()
+		c.healthy = true
+		c.mu.Unlock()
+		c.onChange()
+	}
 
 	return nil
 }
 
 func (c *Container) Stop() error {
 	c.mu.Lock()
-	if c.state != stateRunning && c.state != stateStarting {
+	if c.state != runner.StateRunning && c.state != runner.StateStarting {
 		c.mu.Unlock()
 		return nil
 	}
-	c.state = stateStopping
+	c.state = runner.StateStopping
 	c.healthy = false
 	id := c.containerID
 	if c.cancel != nil {
@@ -160,7 +176,7 @@ func (c *Container) Stop() error {
 	_ = c.api.RemoveContainer(ctx, id)
 
 	c.mu.Lock()
-	c.state = stateStopped
+	c.state = runner.StateStopped
 	c.containerID = ""
 	c.mu.Unlock()
 	c.onChange()
@@ -205,8 +221,8 @@ func (c *Container) watchContainer(ctx context.Context, containerID string) {
 			running, err := c.api.IsContainerRunning(ctx, containerID)
 			if err != nil || !running {
 				c.mu.Lock()
-				if c.state == stateRunning {
-					c.state = stateFailed
+				if c.state == runner.StateRunning {
+					c.state = runner.StateFailed
 					c.healthy = false
 				}
 				c.mu.Unlock()
@@ -217,71 +233,9 @@ func (c *Container) watchContainer(ctx context.Context, containerID string) {
 	}
 }
 
-func (c *Container) startHealthCheck(ctx context.Context) {
-	if c.config.Health == nil || c.config.Health.Path == "" {
-		c.mu.Lock()
-		c.healthy = true
-		c.mu.Unlock()
-		c.onChange()
-		return
-	}
-
-	interval, _ := time.ParseDuration(c.config.Health.Interval)
-	timeout, _ := time.ParseDuration(c.config.Health.Timeout)
-	retries := *c.config.Health.Retries
-
-	client := &http.Client{Timeout: timeout}
-	failures := 0
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	time.Sleep(time.Second)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if c.checkHealth(client) {
-				failures = 0
-				c.mu.Lock()
-				prev := c.healthy
-				c.healthy = true
-				c.mu.Unlock()
-				if !prev {
-					c.onChange()
-				}
-			} else {
-				failures++
-				if failures >= retries {
-					c.mu.Lock()
-					prev := c.healthy
-					c.healthy = false
-					c.mu.Unlock()
-					if prev {
-						c.onChange()
-					}
-				}
-			}
-		}
-	}
-}
-
-func (c *Container) checkHealth(client *http.Client) bool {
-	url := fmt.Sprintf("http://localhost:%d%s", c.config.Port, c.config.Health.Path)
-
-	resp, err := client.Get(url)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	return resp.StatusCode >= 200 && resp.StatusCode < 400
-}
-
 func (c *Container) setFailed() {
 	c.mu.Lock()
-	c.state = stateFailed
+	c.state = runner.StateFailed
 	c.mu.Unlock()
 	c.onChange()
 }

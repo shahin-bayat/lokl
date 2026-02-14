@@ -1,25 +1,25 @@
-package docker
+package runner
 
 import (
 	"strings"
 	"sync"
 )
 
-type logs struct {
+type Logs struct {
 	lines   []string
 	partial string
 	max     int
 	mu      sync.Mutex
 }
 
-func newLogs(max int) *logs {
-	return &logs{
+func NewLogs(max int) *Logs {
+	return &Logs{
 		lines: make([]string, 0, max),
 		max:   max,
 	}
 }
 
-func (b *logs) Write(p []byte) (n int, err error) {
+func (b *Logs) Write(p []byte) (n int, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -39,7 +39,7 @@ func (b *logs) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (b *logs) Lines() []string {
+func (b *Logs) Lines() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

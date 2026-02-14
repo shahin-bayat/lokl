@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/runner"
 )
 
 const (
@@ -23,12 +24,12 @@ const (
 type Process struct {
 	name     string
 	config   config.Service
-	state    state
+	state    runner.State
 	healthy  bool
 	onChange func()
 
 	cmd    *exec.Cmd
-	logs   *logs
+	logs   *runner.Logs
 	cancel context.CancelFunc
 	exitCh chan struct{}
 	mu     sync.Mutex
@@ -38,7 +39,7 @@ func New(name string, cfg config.Service, onChange func()) *Process {
 	return &Process{
 		name:     name,
 		config:   cfg,
-		state:    stateStopped,
+		state:    runner.StateStopped,
 		onChange: onChange,
 	}
 }
@@ -46,7 +47,7 @@ func New(name string, cfg config.Service, onChange func()) *Process {
 func (p *Process) IsRunning() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.state == stateRunning
+	return p.state == runner.StateRunning
 }
 
 func (p *Process) IsHealthy() bool {
@@ -66,7 +67,7 @@ func (p *Process) Start() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.state != stateStopped && p.state != stateFailed {
+	if p.state != runner.StateStopped && p.state != runner.StateFailed {
 		return fmt.Errorf("process %s: cannot start from state %s", p.name, p.state)
 	}
 
@@ -76,7 +77,7 @@ func (p *Process) Start() error {
 		}
 	}
 
-	p.state = stateStarting
+	p.state = runner.StateStarting
 
 	// exec replaces the shell so there's one process to manage, not sh + child.
 	// Setpgid isolates the process tree for clean group-kill on shutdown.
@@ -89,7 +90,7 @@ func (p *Process) Start() error {
 
 	p.cmd.Env = p.buildEnv()
 
-	p.logs = newLogs(maxLogLines)
+	p.logs = runner.NewLogs(maxLogLines)
 
 	// Use os.Pipe so cmd.Wait() only waits for process exit, not I/O.
 	// When Stdout is an *os.File, Go passes the fd directly — no internal
@@ -97,7 +98,7 @@ func (p *Process) Start() error {
 	// child processes (e.g. esbuild watchers) keep the pipe open.
 	pr, pw, err := os.Pipe()
 	if err != nil {
-		p.state = stateFailed
+		p.state = runner.StateFailed
 		return fmt.Errorf("process %s: creating pipe: %w", p.name, err)
 	}
 	p.cmd.Stdout = pw
@@ -106,14 +107,14 @@ func (p *Process) Start() error {
 	if err := p.cmd.Start(); err != nil {
 		_ = pr.Close()
 		_ = pw.Close()
-		p.state = stateFailed
+		p.state = runner.StateFailed
 		return fmt.Errorf("process %s: failed to start: %w", p.name, err)
 	}
 
 	_ = pw.Close()
 	go func() { _, _ = io.Copy(p.logs, pr) }()
 
-	p.state = stateRunning
+	p.state = runner.StateRunning
 	if p.config.Health == nil || p.config.Health.Path == "" {
 		p.healthy = true
 	}
@@ -126,8 +127,8 @@ func (p *Process) Start() error {
 		_ = p.cmd.Wait()
 		_ = pr.Close()
 		p.mu.Lock()
-		if p.state == stateRunning {
-			p.state = stateFailed
+		if p.state == runner.StateRunning {
+			p.state = runner.StateFailed
 		}
 		p.healthy = false
 		if p.cancel != nil {
@@ -140,18 +141,29 @@ func (p *Process) Start() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
-	go p.startHealthCheck(ctx)
+
+	if p.config.Health != nil && p.config.Health.Path != "" {
+		interval, _ := time.ParseDuration(p.config.Health.Interval)
+		timeout, _ := time.ParseDuration(p.config.Health.Timeout)
+		retries := *p.config.Health.Retries
+		go runner.RunHealthCheck(ctx, p.config.Port, p.config.Health.Path, interval, timeout, retries, func(healthy bool) {
+			p.mu.Lock()
+			p.healthy = healthy
+			p.mu.Unlock()
+			p.onChange()
+		})
+	}
 
 	return nil
 }
 
 func (p *Process) Stop() error {
 	p.mu.Lock()
-	if p.state != stateRunning && p.state != stateStarting {
+	if p.state != runner.StateRunning && p.state != runner.StateStarting {
 		p.mu.Unlock()
 		return nil
 	}
-	p.state = stateStopping
+	p.state = runner.StateStopping
 	exitCh := p.exitCh
 	pgid := p.cmd.Process.Pid
 	if p.cancel != nil {
@@ -171,7 +183,7 @@ func (p *Process) Stop() error {
 	killTimer.Stop()
 
 	p.mu.Lock()
-	p.state = stateStopped
+	p.state = runner.StateStopped
 	p.mu.Unlock()
 	p.onChange()
 
