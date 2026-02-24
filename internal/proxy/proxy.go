@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -68,8 +70,9 @@ func (p *Proxy) Start() error {
 	}
 
 	p.server = &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", p.port),
-		Handler: p.handler,
+		Addr:     fmt.Sprintf("0.0.0.0:%d", p.port),
+		Handler:  p.handler,
+		ErrorLog: log.New(io.Discard, "", 0),
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		},
