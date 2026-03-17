@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -44,6 +45,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 		// Parent died (crash/terminal close) but services may still be running.
 		lockfile.KillOrphans(entry)
 		_ = lockfile.Remove(cfg.Name)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("reading lock file: %w (delete %s to reset)", err, lockfile.Path(cfg.Name))
 	}
 
 	var dockerClient *docker.Client
@@ -81,7 +84,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_ = lockfile.Write(buildLockEntry(cfg.Name, runners))
+	if err := lockfile.Write(buildLockEntry(cfg.Name, runners)); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to write lock file: %v\n", err)
+	}
 	defer func() { _ = lockfile.Remove(cfg.Name) }()
 
 	if detach {

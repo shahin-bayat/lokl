@@ -67,42 +67,48 @@ func Remove(project string) error {
 }
 
 func IsStale(e *Entry) bool {
+	if e.PID <= 0 {
+		return true
+	}
 	err := syscall.Kill(e.PID, 0)
 	return errors.Is(err, syscall.ESRCH)
 }
 
 // KillOrphans SIGKILLs services from a stale lock (parent already dead).
 func KillOrphans(e *Entry) {
-	for _, pgid := range e.Processes {
-		_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		runner.SignalTree(pgid, syscall.SIGKILL)
-	}
-	for _, name := range e.Containers {
-		_ = exec.Command("docker", "stop", name).Run()
-	}
+	signalProcesses(e, syscall.SIGKILL)
+	stopContainers(e)
 }
 
 // Kill sends SIGTERM to the parent lokl process and all service PGIDs,
 // then SIGKILLs survivors after the grace period.
-func Kill(e *Entry) error {
-	_ = syscall.Kill(e.PID, syscall.SIGTERM)
-
-	for _, pgid := range e.Processes {
-		_ = syscall.Kill(-pgid, syscall.SIGTERM)
-		runner.SignalTree(pgid, syscall.SIGTERM)
+func Kill(e *Entry) {
+	if e.PID > 0 {
+		_ = syscall.Kill(e.PID, syscall.SIGTERM)
 	}
+
+	signalProcesses(e, syscall.SIGTERM)
 
 	if len(e.Processes) > 0 {
 		time.Sleep(killGracePeriod)
-		for _, pgid := range e.Processes {
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-			runner.SignalTree(pgid, syscall.SIGKILL)
-		}
+		signalProcesses(e, syscall.SIGKILL)
 	}
 
+	stopContainers(e)
+}
+
+func signalProcesses(e *Entry, sig syscall.Signal) {
+	for _, pgid := range e.Processes {
+		if pgid <= 0 {
+			continue
+		}
+		runner.SignalTree(pgid, sig)
+		_ = syscall.Kill(-pgid, sig)
+	}
+}
+
+func stopContainers(e *Entry) {
 	for _, name := range e.Containers {
 		_ = exec.Command("docker", "stop", name).Run()
 	}
-
-	return nil
 }

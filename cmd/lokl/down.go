@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -23,13 +25,14 @@ func runDown(cmd *cobra.Command, args []string) error {
 
 	entry, err := lockfile.Read(cfg.Name)
 	if err != nil {
-		fmt.Println("lokl is not running")
-		return nil
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Println("lokl is not running")
+			return nil
+		}
+		return fmt.Errorf("reading lock file: %w (delete %s to reset)", err, lockfile.Path(cfg.Name))
 	}
 
 	fmt.Printf("stopping %d service(s)...\n", len(entry.Processes)+len(entry.Containers))
-	if err := lockfile.Kill(entry); err != nil {
-		return fmt.Errorf("stopping services: %w", err)
-	}
+	lockfile.Kill(entry)
 	return lockfile.Remove(cfg.Name)
 }

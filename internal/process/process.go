@@ -182,13 +182,13 @@ func (p *Process) Stop() error {
 	}
 	p.mu.Unlock()
 
-	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 	runner.SignalTree(pgid, syscall.SIGTERM)
+	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 
 	// Schedule SIGKILL but cancel if process exits cleanly
 	killTimer := time.AfterFunc(stopTimeout, func() {
-		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		runner.SignalTree(pgid, syscall.SIGKILL)
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 	})
 
 	// Wait for the exit signal from the goroutine that called Wait()
