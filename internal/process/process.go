@@ -211,7 +211,6 @@ func (p *Process) buildEnv() []string {
 	return env
 }
 
-
 func checkPortFree(port int) error {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
