@@ -5,11 +5,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shahin-bayat/lokl/internal/config"
 	"github.com/shahin-bayat/lokl/internal/docker"
+	"github.com/shahin-bayat/lokl/internal/lockfile"
 	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
 	"github.com/shahin-bayat/lokl/internal/supervisor"
@@ -35,6 +37,15 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if entry, err := lockfile.Read(cfg.Name); err == nil {
+		if !lockfile.IsStale(entry) {
+			return fmt.Errorf("lokl is already running for %q (pid %d). Run 'lokl down' to stop it", cfg.Name, entry.PID)
+		}
+		// Parent died (crash/terminal close) but services may still be running.
+		lockfile.KillOrphans(entry)
+		_ = lockfile.Remove(cfg.Name)
+	}
+
 	var dockerClient *docker.Client
 	for _, svc := range cfg.Services {
 		if svc.Image != "" {
@@ -47,11 +58,16 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	runners := make(map[string]supervisor.ProcessRunner)
 	pf := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
+		var r supervisor.ProcessRunner
 		if svc.Image != "" {
-			return docker.NewContainer(name, svc, dockerClient, onChange)
+			r = docker.NewContainer(name, svc, dockerClient, onChange)
+		} else {
+			r = process.New(name, svc, onChange)
 		}
-		return process.New(name, svc, onChange)
+		runners[name] = r
+		return r
 	}
 
 	pm := proxy.New(cfg)
@@ -64,6 +80,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 	if err := sup.Start(); err != nil {
 		return err
 	}
+
+	_ = lockfile.Write(buildLockEntry(cfg.Name, runners))
+	defer func() { _ = lockfile.Remove(cfg.Name) }()
 
 	if detach {
 		sigCh := make(chan os.Signal, 1)
@@ -81,21 +100,41 @@ func runUp(cmd *cobra.Command, args []string) error {
 	return sup.Stop()
 }
 
+func buildLockEntry(project string, runners map[string]supervisor.ProcessRunner) *lockfile.Entry {
+	e := &lockfile.Entry{
+		PID:       os.Getpid(),
+		Project:   project,
+		StartedAt: time.Now().UTC(),
+		Processes: make(map[string]int),
+	}
+	for name, r := range runners {
+		switch v := r.(type) {
+		case *process.Process:
+			if pgid := v.PGID(); pgid != 0 {
+				e.Processes[name] = pgid
+			}
+		case *docker.Container:
+			e.Containers = append(e.Containers, "lokl-"+name)
+		}
+	}
+	return e
+}
+
 func printEvents(ch <-chan types.Event) {
 	for ev := range ch {
+		var prefix string
 		switch ev.Type {
 		case types.EventProgress:
-			if ev.Service != "" {
-				fmt.Fprintf(os.Stderr, "✓ %s: %s\n", ev.Service, ev.Message)
-			} else {
-				fmt.Fprintf(os.Stderr, "✓ %s\n", ev.Message)
-			}
+			prefix = "✓"
 		case types.EventError:
-			if ev.Service != "" {
-				fmt.Fprintf(os.Stderr, "✗ %s: %s\n", ev.Service, ev.Message)
-			} else {
-				fmt.Fprintf(os.Stderr, "✗ %s\n", ev.Message)
-			}
+			prefix = "✗"
+		default:
+			continue
+		}
+		if ev.Service != "" {
+			fmt.Fprintf(os.Stderr, "%s %s: %s\n", prefix, ev.Service, ev.Message)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s %s\n", prefix, ev.Message)
 		}
 	}
 }

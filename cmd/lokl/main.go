@@ -27,15 +27,6 @@ var rootCmd = &cobra.Command{
 	Version: buildVersion,
 }
 
-var downCmd = &cobra.Command{
-	Use:   "down [services...]",
-	Short: "Stop the development environment",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Running in foreground mode. Use Ctrl+C to stop.")
-		return nil
-	},
-}
-
 var statusCmd = &cobra.Command{
 	Use:     "status",
 	Aliases: []string{"ps"},
