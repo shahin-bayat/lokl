@@ -157,6 +157,17 @@ func (p *Process) Start() error {
 	return nil
 }
 
+// PGID returns the process group ID. Because Setpgid is true, PGID == PID.
+// Returns 0 if the process has not started.
+func (p *Process) PGID() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.cmd == nil || p.cmd.Process == nil {
+		return 0
+	}
+	return p.cmd.Process.Pid
+}
+
 func (p *Process) Stop() error {
 	p.mu.Lock()
 	if p.state != runner.StateRunning && p.state != runner.StateStarting {
@@ -172,10 +183,12 @@ func (p *Process) Stop() error {
 	p.mu.Unlock()
 
 	_ = syscall.Kill(-pgid, syscall.SIGTERM)
+	runner.SignalTree(pgid, syscall.SIGTERM)
 
 	// Schedule SIGKILL but cancel if process exits cleanly
 	killTimer := time.AfterFunc(stopTimeout, func() {
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		runner.SignalTree(pgid, syscall.SIGKILL)
 	})
 
 	// Wait for the exit signal from the goroutine that called Wait()
@@ -197,6 +210,7 @@ func (p *Process) buildEnv() []string {
 	}
 	return env
 }
+
 
 func checkPortFree(port int) error {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
