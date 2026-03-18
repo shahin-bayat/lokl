@@ -1,0 +1,523 @@
+# lokl — Full Documentation
+
+> lokl is a CLI/TUI tool for local development environment orchestration. It starts all your services (local processes and Docker containers) with a single command, provides automatic HTTPS with custom domains and auto-trusted certificates, and offers an interactive terminal UI. No mitmproxy, no nginx config, no browser extensions — just `lokl up`.
+
+Source: https://shahin-bayat.github.io/lokl
+GitHub: https://github.com/shahin-bayat/lokl
+
+---
+
+## Introduction
+
+lokl is a CLI/TUI tool that allows developers to define their entire local development environment in a single configuration file.
+
+### The Problem
+
+Setting up a local development environment is painful:
+
+- **Time-consuming** — New developers spend hours/days configuring their setup
+- **Inconsistent** — "Works on my machine" syndrome
+- **Complex HTTPS** — OAuth, cookies, CORS often require HTTPS with custom domains
+- **Scattered config** — Docker Compose, npm scripts, env files, nginx configs everywhere
+
+### The Solution
+
+lokl provides:
+
+1. **Single config file** — All services defined in `lokl.yaml`
+2. **Automatic HTTPS** — Certificates generated and trusted for custom domains
+3. **Process orchestration** — Health checks, dependencies, restart policies
+4. **Interactive TUI** — Visual management of all services
+
+### Key differentiators
+
+- **vs Docker Compose**: lokl orchestrates both local processes and containers. Docker Compose only handles containers — you still need separate tooling (concurrently, npm-run-all) for local dev servers.
+- **vs mitmproxy / nginx**: No manual proxy config. lokl generates and trusts certificates automatically. No browser extensions or system proxy settings needed.
+- **vs concurrently / npm-run-all**: lokl adds HTTPS routing, health checks, dependency ordering, and a TUI on top of basic process management.
+
+---
+
+## Installation
+
+### Requirements
+
+- macOS or Linux (Windows not supported)
+- Docker (only required if using container-based services)
+
+### Homebrew (Recommended)
+
+```bash
+brew install shahin-bayat/tap/lokl
+```
+
+### One-liner Script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shahin-bayat/lokl/main/install.sh | bash
+```
+
+This downloads the latest release and installs to `/usr/local/bin` (or `~/.local/bin` if no write access).
+
+To install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shahin-bayat/lokl/main/install.sh | bash -s -- v0.1.0
+```
+
+### Install from Source
+
+Requires Go 1.23+:
+
+```bash
+go install github.com/shahin-bayat/lokl/cmd/lokl@latest
+```
+
+### Verify Installation
+
+```bash
+lokl --version
+```
+
+### Shell Completions
+
+```bash
+# Bash
+lokl completion bash > /etc/bash_completion.d/lokl
+
+# Zsh
+lokl completion zsh > "${fpath[1]}/_lokl"
+
+# Fish
+lokl completion fish > ~/.config/fish/completions/lokl.fish
+```
+
+---
+
+## Quick Start
+
+### Auto-detect your project
+
+```bash
+cd your-project
+lokl init
+```
+
+This scans your project, detects services, and generates a `lokl.yaml` config file.
+
+### Or create manually
+
+Create a `lokl.yaml` in your project root:
+
+```yaml
+name: my-project
+version: "1"
+
+proxy:
+  domain: myproject.dev
+
+services:
+  app:
+    command: pnpm dev
+    port: 3000
+```
+
+### Start your environment
+
+```bash
+lokl up
+```
+
+This will:
+1. Start all services
+2. Generate HTTPS certificates
+3. Configure local DNS
+4. Open the interactive TUI
+
+### DNS Setup (one-time)
+
+```bash
+sudo lokl dns setup
+```
+
+This adds entries to `/etc/hosts`.
+
+### TUI Controls
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Navigate services |
+| `s` | Start service |
+| `x` | Stop service |
+| `r` | Restart service |
+| `l` | Toggle logs |
+| `p` | Toggle proxy |
+| `?` | Help modal |
+| `q` | Quit |
+
+---
+
+## Configuration Reference
+
+### Config File (`lokl.yaml`)
+
+lokl uses a YAML configuration file, typically named `lokl.yaml`, to define your development environment.
+
+#### Basic Structure
+
+```yaml
+name: my-project
+version: "1"
+
+proxy:
+  domain: myproject.dev
+
+env:
+  NODE_ENV: development
+
+services:
+  service-name:
+    command: ...
+    port: ...
+```
+
+#### Top-level Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Project name used for identification and DNS markers |
+| `version` | No | Config version, currently `"1"` |
+| `proxy.domain` | No | Base domain for HTTPS routing |
+| `env` | No | Global environment variables inherited by all services |
+| `services` | Yes | Map of service definitions |
+
+---
+
+### Services
+
+Services are the core of your lokl configuration. Each service represents a process or container.
+
+#### Command-based Services (local processes)
+
+```yaml
+services:
+  frontend:
+    command: pnpm dev
+    path: apps/frontend
+    port: 5173
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `command` | string | Shell command to run |
+| `path` | string | Working directory (relative to config) |
+| `port` | int | Port the service listens on |
+| `env` | map | Environment variables |
+| `env_file` | list | Paths to `.env` files to load |
+| `depends_on` | list | Services to start first |
+| `autostart` | bool | Start automatically (default: true) |
+| `restart` | string | Restart policy: `no`, `always`, `on-failure` |
+
+#### Container-based Services (Docker)
+
+```yaml
+services:
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    port: 5432
+    env:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - ./data:/var/lib/postgresql/data
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `image` | string | Docker image |
+| `ports` | list | Port mappings (`host:container`) |
+| `port` | int | Host port for proxy routing and health checks |
+| `env` | map | Environment variables |
+| `env_file` | list | Paths to `.env` files to load |
+| `volumes` | list | Volume mounts (`host:container`) |
+| `subdomain` | string | Subdomain for proxy routing |
+| `depends_on` | list | Services to start first |
+| `health` | object | Health check configuration |
+| `autostart` | bool | Start automatically (default: true) |
+
+#### Dependencies
+
+```yaml
+services:
+  api:
+    command: pnpm dev
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:16
+
+  redis:
+    image: redis:7
+```
+
+#### Health Checks
+
+```yaml
+services:
+  api:
+    command: pnpm dev
+    port: 3000
+    health:
+      path: /health
+      interval: 10s
+      timeout: 5s
+      retries: 3
+```
+
+#### Environment Variables
+
+Load from `.env` files:
+
+```yaml
+env_file:
+  - .env
+
+services:
+  api:
+    env_file:
+      - .env.local
+```
+
+Variable interpolation using host environment:
+
+```yaml
+services:
+  api:
+    env:
+      DATABASE_URL: postgres://${DB_USER}:${DB_PASS}@localhost:5432/mydb
+```
+
+---
+
+### Proxy & HTTPS
+
+lokl includes a built-in reverse proxy with automatic HTTPS.
+
+#### How It Works
+
+1. **Certificate Generation** — lokl generates self-signed certificates for your domain
+2. **Trust Store** — Certificates are added to your system trust store (no browser warnings)
+3. **DNS** — Entries added to `/etc/hosts` for local resolution
+4. **Routing** — Requests proxied to the appropriate service based on subdomain
+
+#### Subdomains
+
+```yaml
+services:
+  frontend:
+    port: 5173
+    subdomain: app      # → https://app.myproject.dev
+
+  api:
+    port: 3000
+    subdomain: api      # → https://api.myproject.dev
+```
+
+#### Root Domain
+
+A service without a subdomain gets the root domain:
+
+```yaml
+services:
+  main:
+    port: 3000
+    # No subdomain → https://myproject.dev
+```
+
+#### Path-based Routing
+
+Multiple services can share a subdomain using path prefixes:
+
+```yaml
+services:
+  api:
+    port: 3000
+    subdomain: app
+    rewrite:
+      strip_prefix: /api
+
+  frontend:
+    port: 5173
+    subdomain: app
+    # → https://app.myproject.dev/api → api service
+    # → https://app.myproject.dev/* → frontend service
+```
+
+#### Strip Prefix and Fallback
+
+```yaml
+services:
+  api:
+    port: 3000
+    subdomain: api
+    rewrite:
+      strip_prefix: /v1        # Strip /v1 before forwarding
+      fallback: /index.html    # SPA fallback for 404s
+```
+
+---
+
+## CLI Reference
+
+### lokl up
+
+Start all services defined in your config file.
+
+```bash
+lokl up [flags]
+```
+
+| Flag | Description |
+|------|-------------|
+| `-c, --config` | Config file path (default: `lokl.yaml`) |
+| `-d, --detach` | Run without TUI (background mode) |
+
+Examples:
+```bash
+lokl up                    # Start with TUI
+lokl up --detach           # Start in background (no TUI)
+lokl up -c custom.yaml     # Use custom config
+```
+
+### lokl down
+
+Stop all services. Reads the lock file and kills service processes by process group.
+
+```bash
+lokl down [flags]
+```
+
+| Flag | Description |
+|------|-------------|
+| `-c, --config` | Config file path (default: `lokl.yaml`) |
+
+Works even if the lokl process was killed (e.g., terminal closed). Useful for cleaning up orphaned processes.
+
+### lokl init
+
+Scan your project and generate a `lokl.yaml` configuration file.
+
+```bash
+lokl init
+```
+
+Currently supports Node.js projects (monorepos and single-app). Detects pnpm, yarn, npm, bun. Infers ports from script flags and known tool defaults (vite: 5173, next: 3000).
+
+### lokl validate
+
+Check your config file for errors without starting any services.
+
+```bash
+lokl validate [flags]
+```
+
+Checks: YAML syntax, required fields, port conflicts, circular dependencies, env file resolution, Docker port mapping format.
+
+Useful in CI:
+```yaml
+- name: Validate lokl config
+  run: lokl validate
+```
+
+### lokl dns setup / remove
+
+```bash
+sudo lokl dns setup    # Add /etc/hosts entries
+sudo lokl dns remove   # Remove /etc/hosts entries
+```
+
+Adds entries like:
+```
+# lokl:my-project
+127.0.0.1 myproject.dev
+127.0.0.1 app.myproject.dev
+# lokl:my-project:end
+```
+
+Requires sudo. lokl only modifies entries within its own markers.
+
+---
+
+## Complete example (real-world multi-service app)
+
+```yaml
+name: my-app
+version: "1"
+
+proxy:
+  domain: myapp.dev
+
+env:
+  NODE_ENV: development
+
+services:
+  frontend:
+    command: pnpm dev
+    path: apps/frontend
+    port: 5173
+    subdomain: app
+    depends_on:
+      - api
+
+  api:
+    command: go run ./cmd/server
+    path: services/api
+    port: 8080
+    subdomain: api
+    health:
+      path: /health
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    env:
+      DATABASE_URL: postgres://postgres:secret@localhost:5432/myapp
+    env_file:
+      - .env.local
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    command: go run ./cmd/worker
+    path: services/worker
+    env_file:
+      - .env.local
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    port: 5432
+    env:
+      POSTGRES_DB: myapp
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    port: 6379
+```
+
+After `sudo lokl dns setup` and `lokl up`:
+- `https://app.myapp.dev` → frontend (Vite dev server)
+- `https://api.myapp.dev` → Go API
+- PostgreSQL on localhost:5432
+- Redis on localhost:6379
+- Worker process started after DB is ready

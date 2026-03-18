@@ -1,0 +1,141 @@
+# lokl
+
+> lokl is a CLI/TUI tool for local development environment orchestration. It starts all your services (local processes and Docker containers) with a single command, provides automatic HTTPS with custom domains and auto-trusted certificates, and offers an interactive terminal UI. No mitmproxy, no nginx config, no browser extensions — just `lokl up`.
+
+## What it does
+
+lokl reads a single `lokl.yaml` config file and:
+- Starts local processes (pnpm, npm, go run, air, etc.) and Docker containers
+- Spins up a reverse proxy with auto-generated, locally-trusted HTTPS certificates
+- Manages `/etc/hosts` DNS entries for custom `.dev` domains
+- Shows a live TUI with service status, health checks, and log viewer
+- Handles startup dependencies (`depends_on`), health checks, and environment variables
+
+## Key differentiators
+
+- **vs Docker Compose**: lokl orchestrates both local processes and containers. Docker Compose only handles containers — you still need separate tooling (concurrently, npm-run-all) for local dev servers.
+- **vs mitmproxy / nginx**: No manual proxy config. lokl generates and trusts certificates automatically. No browser extensions or system proxy settings needed.
+- **vs concurrently / npm-run-all**: lokl adds HTTPS routing, health checks, dependency ordering, and a TUI on top of basic process management.
+- **Platform**: macOS and Linux only (uses Unix process groups, /etc/hosts, system trust store).
+
+## Requirements
+
+- macOS or Linux (Windows not supported)
+- Docker (only required if using container-based services)
+- `sudo` for DNS setup (one-time: `sudo lokl dns setup`)
+
+## Installation
+
+```bash
+# Homebrew (recommended)
+brew install shahin-bayat/tap/lokl
+
+# One-liner
+curl -fsSL https://raw.githubusercontent.com/shahin-bayat/lokl/main/install.sh | bash
+
+# From source (Go 1.23+)
+go install github.com/shahin-bayat/lokl/cmd/lokl@latest
+```
+
+## Minimal example
+
+```yaml
+name: my-project
+version: "1"
+
+proxy:
+  domain: myproject.dev
+
+services:
+  app:
+    command: pnpm dev
+    port: 3000
+```
+
+Access at `https://myproject.dev` after `lokl up`.
+
+## Full example (multi-service with Docker)
+
+```yaml
+name: my-project
+version: "1"
+
+proxy:
+  domain: myproject.dev
+
+env:
+  NODE_ENV: development
+
+services:
+  frontend:
+    command: pnpm dev
+    path: apps/frontend
+    port: 5173
+    subdomain: app          # → https://app.myproject.dev
+    depends_on:
+      - api
+
+  api:
+    command: go run ./cmd/api
+    path: services/api
+    port: 8080
+    subdomain: api          # → https://api.myproject.dev
+    health:
+      path: /health
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    env:
+      DATABASE_URL: postgres://localhost:5432/mydb
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    env:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - ./data:/var/lib/postgresql/data
+```
+
+## CLI commands
+
+- `lokl up` — Start all services (launches TUI)
+- `lokl up -d` — Start detached (no TUI, logs to stdout)
+- `lokl down` — Stop all services (reads lock file, kills by process group)
+- `lokl init` — Auto-detect project structure and generate `lokl.yaml`
+- `lokl validate` — Validate config file (useful in CI)
+- `lokl dns setup` — Add `/etc/hosts` entries (requires sudo, one-time)
+- `lokl dns remove` — Remove `/etc/hosts` entries
+
+## TUI key bindings
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Navigate services |
+| `s` | Start service |
+| `x` | Stop service |
+| `r` | Restart service |
+| `l` | Toggle log viewer |
+| `p` | Toggle proxy (local ↔ HTTPS) |
+| `?` | Help modal |
+| `q` | Quit |
+
+## Docs
+
+- Full docs: https://shahin-bayat.github.io/lokl
+- Introduction: https://shahin-bayat.github.io/lokl/introduction/
+- Installation: https://shahin-bayat.github.io/lokl/installation/
+- Quick start: https://shahin-bayat.github.io/lokl/quick-start/
+- Config file reference: https://shahin-bayat.github.io/lokl/config/file/
+- Services reference: https://shahin-bayat.github.io/lokl/config/services/
+- Proxy & HTTPS: https://shahin-bayat.github.io/lokl/config/proxy/
+- CLI reference: https://shahin-bayat.github.io/lokl/cli/up/
+
+## Links
+
+- GitHub: https://github.com/shahin-bayat/lokl
+- Releases: https://github.com/shahin-bayat/lokl/releases
+- Issues: https://github.com/shahin-bayat/lokl/issues
