@@ -252,9 +252,10 @@ func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
 	return nil
 }
 
-func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string) (int, error) {
+func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string, env []string) (int, error) {
 	exec, err := c.api.ExecCreate(ctx, id, client.ExecCreateOptions{
 		Cmd:          cmd,
+		Env:          env,
 		AttachStdout: false,
 		AttachStderr: false,
 		AttachStdin:  false,

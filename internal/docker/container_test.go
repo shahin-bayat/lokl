@@ -29,7 +29,7 @@ type mockAPI struct {
 	CloseFn                func() error
 	EnsureProjectNetworkFn func(ctx context.Context, name string) error
 	RemoveNetworkFn        func(ctx context.Context, name string) error
-	ExecContainerFn        func(ctx context.Context, id string, cmd []string) (int, error)
+	ExecContainerFn        func(ctx context.Context, id string, cmd []string, env []string) (int, error)
 	NetworkConnectFn       func(ctx context.Context, networkID string, opts interface{}) (interface{}, error)
 }
 
@@ -117,9 +117,9 @@ func (m *mockAPI) RemoveNetwork(ctx context.Context, name string) error {
 	return nil
 }
 
-func (m *mockAPI) ExecContainer(ctx context.Context, id string, cmd []string) (int, error) {
+func (m *mockAPI) ExecContainer(ctx context.Context, id string, cmd []string, env []string) (int, error) {
 	if m.ExecContainerFn != nil {
-		return m.ExecContainerFn(ctx, id, cmd)
+		return m.ExecContainerFn(ctx, id, cmd, env)
 	}
 	return 0, nil
 }
@@ -410,7 +410,7 @@ func TestContainerStartWithEnv(t *testing.T) {
 func TestContainerExecHealthCheck(t *testing.T) {
 	execCalls := 0
 	mock := &mockAPI{
-		ExecContainerFn: func(_ context.Context, _ string, cmd []string) (int, error) {
+		ExecContainerFn: func(_ context.Context, _ string, cmd []string, _ []string) (int, error) {
 			execCalls++
 			// Healthy after 2nd call.
 			if execCalls >= 2 {

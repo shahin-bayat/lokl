@@ -153,6 +153,7 @@ func (c *Container) Start() error {
 	switch {
 	case c.config.Health != nil && c.config.Health.Command.IsSet():
 		cmd := buildExecCmd(c.config.Health.Command)
+		env := envMapToSlice(c.config.Env)
 		interval, _ := time.ParseDuration(c.config.Health.Interval)
 		timeout, _ := time.ParseDuration(c.config.Health.Timeout)
 		retries := defaultRetries
@@ -162,7 +163,7 @@ func (c *Container) Start() error {
 		go runner.RunProbe(runCtx, func() bool {
 			execCtx, cancel := context.WithTimeout(runCtx, timeout)
 			defer cancel()
-			code, err := c.api.ExecContainer(execCtx, id, cmd)
+			code, err := c.api.ExecContainer(execCtx, id, cmd, env)
 			return err == nil && code == 0
 		}, interval, timeout, retries, func(healthy bool) {
 			c.mu.Lock()
@@ -340,4 +341,12 @@ func parsePortPair(s string) (host, container int, err error) {
 		return 0, 0, fmt.Errorf("invalid container port: %w", err)
 	}
 	return host, container, nil
+}
+
+func envMapToSlice(env map[string]string) []string {
+	out := make([]string, 0, len(env))
+	for k, v := range env {
+		out = append(out, k+"="+v)
+	}
+	return out
 }
