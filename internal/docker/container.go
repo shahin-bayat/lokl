@@ -152,8 +152,7 @@ func (c *Container) Start() error {
 
 	switch {
 	case c.config.Health != nil && c.config.Health.Command.IsSet():
-		cmd := buildExecCmd(c.config.Health.Command)
-		env := envMapToSlice(c.config.Env)
+		cmd := buildExecCmd(expandHealthCmd(c.config.Health.Command, c.config.Env))
 		interval, _ := time.ParseDuration(c.config.Health.Interval)
 		timeout, _ := time.ParseDuration(c.config.Health.Timeout)
 		retries := defaultRetries
@@ -163,7 +162,10 @@ func (c *Container) Start() error {
 		go runner.RunProbe(runCtx, func() bool {
 			execCtx, cancel := context.WithTimeout(runCtx, timeout)
 			defer cancel()
-			code, err := c.api.ExecContainer(execCtx, id, cmd, env)
+			code, err := c.api.ExecContainer(execCtx, id, cmd, nil)
+			if err != nil || code != 0 {
+				c.logf("health exec: code=%d err=%v", code, err)
+			}
 			return err == nil && code == 0
 		}, interval, timeout, retries, func(healthy bool) {
 			c.mu.Lock()
@@ -291,6 +293,23 @@ func buildExecCmd(s config.StringOrSlice) []string {
 	return s.Args
 }
 
+// expandHealthCmd expands ${VAR} references in health command args using the
+// service env map, so exec inherits the container's PATH instead of getting a
+// replacement environment.
+func expandHealthCmd(s config.StringOrSlice, env map[string]string) config.StringOrSlice {
+	lookup := func(key string) string {
+		if v, ok := env[key]; ok {
+			return v
+		}
+		return os.Getenv(key)
+	}
+	expanded := make([]string, len(s.Args))
+	for i, arg := range s.Args {
+		expanded[i] = os.Expand(arg, lookup)
+	}
+	return config.StringOrSlice{Args: expanded, Shell: s.Shell}
+}
+
 // absVolumes resolves relative host paths in volume mappings to absolute paths
 // and pre-creates the host directory if it doesn't exist.
 // Docker requires absolute host paths; Docker Desktop won't auto-create missing dirs.
@@ -341,12 +360,4 @@ func parsePortPair(s string) (host, container int, err error) {
 		return 0, 0, fmt.Errorf("invalid container port: %w", err)
 	}
 	return host, container, nil
-}
-
-func envMapToSlice(env map[string]string) []string {
-	out := make([]string, 0, len(env))
-	for k, v := range env {
-		out = append(out, k+"="+v)
-	}
-	return out
 }
