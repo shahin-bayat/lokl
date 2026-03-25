@@ -147,6 +147,15 @@ func (c *Client) CreateContainer(ctx context.Context, cfg ContainerConfig) (stri
 		return "", fmt.Errorf("creating container: %w", err)
 	}
 
+	if cfg.Network != "" {
+		if _, err := c.api.NetworkConnect(ctx, cfg.Network, client.NetworkConnectOptions{
+			Container: resp.ID,
+		}); err != nil {
+			_ = c.RemoveContainer(ctx, resp.ID)
+			return "", fmt.Errorf("attaching container to network %q: %w", cfg.Network, err)
+		}
+	}
+
 	return resp.ID, nil
 }
 

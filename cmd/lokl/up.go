@@ -65,7 +65,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	pf := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
 		var r supervisor.ProcessRunner
 		if svc.Image != "" {
-			r = docker.NewContainer(name, svc, dockerClient, onChange)
+			r = docker.NewContainer(name, svc, dockerClient, "", onChange)
 		} else {
 			r = process.New(name, svc, onChange)
 		}

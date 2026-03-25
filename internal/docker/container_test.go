@@ -14,19 +14,20 @@ import (
 var _ DockerAPI = (*mockAPI)(nil)
 
 type mockAPI struct {
-	PullImageFn           func(ctx context.Context, image string, onProgress func(string)) error
-	ImageExistsFn         func(ctx context.Context, image string) (bool, error)
-	FindContainerByNameFn func(ctx context.Context, name string) (string, error)
-	CreateContainerFn     func(ctx context.Context, cfg ContainerConfig) (string, error)
-	StartContainerFn      func(ctx context.Context, id string) error
-	StopContainerFn       func(ctx context.Context, id string, timeoutSeconds int) error
-	RemoveContainerFn     func(ctx context.Context, id string) error
-	IsContainerRunningFn  func(ctx context.Context, id string) (bool, error)
-	StreamLogsFn          func(ctx context.Context, id string, follow bool) (io.ReadCloser, error)
-	CloseFn               func() error
+	PullImageFn            func(ctx context.Context, image string, onProgress func(string)) error
+	ImageExistsFn          func(ctx context.Context, image string) (bool, error)
+	FindContainerByNameFn  func(ctx context.Context, name string) (string, error)
+	CreateContainerFn      func(ctx context.Context, cfg ContainerConfig) (string, error)
+	StartContainerFn       func(ctx context.Context, id string) error
+	StopContainerFn        func(ctx context.Context, id string, timeoutSeconds int) error
+	RemoveContainerFn      func(ctx context.Context, id string) error
+	IsContainerRunningFn   func(ctx context.Context, id string) (bool, error)
+	StreamLogsFn           func(ctx context.Context, id string, follow bool) (io.ReadCloser, error)
+	CloseFn                func() error
 	EnsureProjectNetworkFn func(ctx context.Context, name string) error
 	RemoveNetworkFn        func(ctx context.Context, name string) error
 	ExecContainerFn        func(ctx context.Context, id string, cmd []string) (int, error)
+	NetworkConnectFn       func(ctx context.Context, networkID string, opts interface{}) (interface{}, error)
 }
 
 func (m *mockAPI) PullImage(ctx context.Context, image string, onProgress func(string)) error {
@@ -120,8 +121,15 @@ func (m *mockAPI) ExecContainer(ctx context.Context, id string, cmd []string) (i
 	return 0, nil
 }
 
+func (m *mockAPI) NetworkConnect(ctx context.Context, networkID string, opts interface{}) (interface{}, error) {
+	if m.NetworkConnectFn != nil {
+		return m.NetworkConnectFn(ctx, networkID, opts)
+	}
+	return nil, nil
+}
+
 func TestContainerStartStop(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
 
 	if c.IsRunning() {
 		t.Fatal("expected not running before start")
@@ -160,7 +168,7 @@ func TestContainerStartPullsImage(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx:latest"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx:latest"}, mock, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -187,7 +195,7 @@ func TestContainerStartCleansStaleContainer(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -208,7 +216,7 @@ func TestContainerStartCreateError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from start")
 	}
@@ -218,7 +226,7 @@ func TestContainerStartCreateError(t *testing.T) {
 }
 
 func TestContainerStartAlreadyRunning(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("first start: %v", err)
 	}
@@ -230,7 +238,7 @@ func TestContainerStartAlreadyRunning(t *testing.T) {
 }
 
 func TestContainerStopWhenStopped(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
 	if err := c.Stop(); err != nil {
 		t.Fatalf("stop when already stopped: %v", err)
 	}
@@ -320,7 +328,7 @@ func TestContainerStartPullError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from pull failure")
 	}
@@ -336,7 +344,7 @@ func TestContainerStartImageCheckError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from image check failure")
 	}
@@ -357,7 +365,7 @@ func TestContainerStartContainerStartError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from container start failure")
 	}
@@ -382,7 +390,7 @@ func TestContainerStartWithEnv(t *testing.T) {
 		Image: "nginx",
 		Env:   map[string]string{"NODE_ENV": "production", "PORT": "3000"},
 	}
-	c := NewContainer("web", svc, mock, func() {})
+	c := NewContainer("web", svc, mock, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -410,7 +418,7 @@ func TestContainerStartWithVolumes(t *testing.T) {
 		Volumes: []string{"./data:/var/lib/postgresql/data"},
 		Ports:   []string{"5432:5432"},
 	}
-	c := NewContainer("db", svc, mock, func() {})
+	c := NewContainer("db", svc, mock, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}

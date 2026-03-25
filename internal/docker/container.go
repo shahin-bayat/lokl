@@ -24,6 +24,7 @@ type Container struct {
 	name     string
 	config   config.Service
 	api      DockerAPI
+	network  string
 	state    runner.State
 	healthy  bool
 	onChange func()
@@ -34,11 +35,12 @@ type Container struct {
 	mu          sync.Mutex
 }
 
-func NewContainer(name string, cfg config.Service, api DockerAPI, onChange func()) *Container {
+func NewContainer(name string, cfg config.Service, api DockerAPI, network string, onChange func()) *Container {
 	return &Container{
 		name:     name,
 		config:   cfg,
 		api:      api,
+		network:  network,
 		state:    runner.StateStopped,
 		onChange: onChange,
 	}
@@ -111,6 +113,7 @@ func (c *Container) Start() error {
 		Ports:   ports,
 		Volumes: c.config.Volumes,
 		Labels:  map[string]string{containerLabel: c.name},
+		Network: c.network,
 	}
 
 	id, err := c.api.CreateContainer(ctx, cfg)
