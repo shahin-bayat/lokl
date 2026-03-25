@@ -19,6 +19,7 @@ import (
 	"github.com/shahin-bayat/lokl/internal/supervisor"
 	"github.com/shahin-bayat/lokl/internal/tui"
 	"github.com/shahin-bayat/lokl/internal/types"
+	"github.com/shahin-bayat/lokl/internal/update"
 )
 
 var detach bool
@@ -34,6 +35,11 @@ func init() {
 }
 
 func runUp(cmd *cobra.Command, args []string) error {
+	updateCh := make(chan string, 1)
+	go func() {
+		updateCh <- update.Check(buildVersion)
+	}()
+
 	cfg, err := config.Load(configFile)
 	if err != nil {
 		return err
@@ -114,6 +120,10 @@ func runUp(cmd *cobra.Command, args []string) error {
 			_ = sup.Stop()
 			return err
 		}
+	}
+
+	if v := <-updateCh; v != "" {
+		fmt.Fprintf(os.Stderr, "\nlokl %s is available (you have %s). Run: brew upgrade lokl\n", v, buildVersion)
 	}
 
 	return sup.Stop()
