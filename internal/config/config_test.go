@@ -1,8 +1,11 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestLoad(t *testing.T) {
@@ -322,5 +325,61 @@ func TestApplyDefaults(t *testing.T) {
 	}
 	if svcB.Health.Retries == nil || *svcB.Health.Retries != 3 {
 		t.Error("health.retries should default to 3")
+	}
+}
+
+func TestStringOrSliceUnmarshal(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantArgs  []string
+		wantShell bool
+	}{
+		{
+			name:      "string form",
+			yaml:      `command: "pg_isready -U postgres"`,
+			wantArgs:  []string{"pg_isready", "-U", "postgres"},
+			wantShell: true,
+		},
+		{
+			name:      "array form",
+			yaml:      `command: ["redis-cli", "ping"]`,
+			wantArgs:  []string{"redis-cli", "ping"},
+			wantShell: false,
+		},
+		{
+			name:      "single-element array",
+			yaml:      `command: ["pg_isready"]`,
+			wantArgs:  []string{"pg_isready"},
+			wantShell: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			type wrapper struct {
+				Command StringOrSlice `yaml:"command"`
+			}
+			var w wrapper
+			if err := yaml.Unmarshal([]byte(tt.yaml), &w); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if !slices.Equal(w.Command.Args, tt.wantArgs) {
+				t.Errorf("args = %v, want %v", w.Command.Args, tt.wantArgs)
+			}
+			if w.Command.Shell != tt.wantShell {
+				t.Errorf("shell = %v, want %v", w.Command.Shell, tt.wantShell)
+			}
+		})
+	}
+}
+
+func TestStringOrSliceIsSet(t *testing.T) {
+	empty := StringOrSlice{}
+	if empty.IsSet() {
+		t.Error("empty StringOrSlice should not be set")
+	}
+	set := StringOrSlice{Args: []string{"pg_isready"}}
+	if !set.IsSet() {
+		t.Error("non-empty StringOrSlice should be set")
 	}
 }

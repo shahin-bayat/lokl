@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -55,11 +56,36 @@ type RewriteConfig struct {
 	Fallback    string `yaml:"fallback"`
 }
 
+// StringOrSlice unmarshals both "cmd arg" and ["cmd", "arg"] into a typed slice.
+// Shell=true when parsed from a plain YAML string — signals sh -c wrapping.
+// Shell=false when parsed from a YAML sequence — signals direct exec.
+type StringOrSlice struct {
+	Args  []string
+	Shell bool
+}
+
+func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		s.Args = strings.Fields(value.Value)
+		s.Shell = true
+	case yaml.SequenceNode:
+		s.Shell = false
+		return value.Decode(&s.Args)
+	default:
+		return fmt.Errorf("health.command: expected string or sequence, got %v", value.Tag)
+	}
+	return nil
+}
+
+func (s StringOrSlice) IsSet() bool { return len(s.Args) > 0 }
+
 type HealthConfig struct {
-	Path     string `yaml:"path"`
-	Interval string `yaml:"interval"`
-	Timeout  string `yaml:"timeout"`
-	Retries  *int   `yaml:"retries"`
+	Path     string        `yaml:"path"`
+	Command  StringOrSlice `yaml:"command"`
+	Interval string        `yaml:"interval"`
+	Timeout  string        `yaml:"timeout"`
+	Retries  *int          `yaml:"retries"`
 }
 
 type LimitsConfig struct {
