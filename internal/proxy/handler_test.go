@@ -252,3 +252,22 @@ func TestHasFileExtension(t *testing.T) {
 		})
 	}
 }
+
+func TestSelectTargetUsesIPv4Loopback(t *testing.T) {
+	rt := &route{port: 3000}
+	rt.enabled.Store(true)
+
+	h := &handler{dnsCache: make(map[string]string)}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	target, _, remote, err := h.selectTarget(rt, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if remote {
+		t.Fatal("expected local route")
+	}
+	if target.Host != "127.0.0.1:3000" {
+		t.Errorf("host = %q, want %q", target.Host, "127.0.0.1:3000")
+	}
+}
