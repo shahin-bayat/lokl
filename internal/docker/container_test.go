@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -509,8 +510,9 @@ func TestContainerStartWithVolumes(t *testing.T) {
 	if len(gotCfg.Volumes) != 1 {
 		t.Errorf("volumes count = %d, want 1", len(gotCfg.Volumes))
 	}
-	if gotCfg.Volumes[0] != "./data:/var/lib/postgresql/data" {
-		t.Errorf("volume = %q, want ./data:/var/lib/postgresql/data", gotCfg.Volumes[0])
+	// Relative host paths are resolved to absolute by absVolumes.
+	if !strings.HasSuffix(gotCfg.Volumes[0], "/data:/var/lib/postgresql/data") {
+		t.Errorf("volume = %q, want suffix /data:/var/lib/postgresql/data", gotCfg.Volumes[0])
 	}
 	if len(gotCfg.Ports) != 1 || gotCfg.Ports[0].Host != 5432 {
 		t.Errorf("ports = %+v, want [{5432 5432 }]", gotCfg.Ports)

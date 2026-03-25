@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -112,7 +113,7 @@ func (c *Container) Start() error {
 		Image:          c.config.Image,
 		Env:            c.config.Env,
 		Ports:          ports,
-		Volumes:        c.config.Volumes,
+		Volumes:        absVolumes(c.config.Volumes),
 		Labels:         map[string]string{containerLabel: c.name},
 		Network:        c.network,
 		NetworkAliases: []string{c.name},
@@ -280,6 +281,26 @@ func buildExecCmd(s config.StringOrSlice) []string {
 		return []string{"sh", "-c", strings.Join(s.Args, " ")}
 	}
 	return s.Args
+}
+
+// absVolumes resolves relative host paths in volume mappings to absolute paths.
+// Docker requires absolute host paths for bind mounts.
+func absVolumes(raw []string) []string {
+	out := make([]string, len(raw))
+	for i, v := range raw {
+		host, rest, ok := strings.Cut(v, ":")
+		if ok && !filepath.IsAbs(host) {
+			if abs, err := filepath.Abs(host); err == nil {
+				host = abs
+			}
+		}
+		if ok {
+			out[i] = host + ":" + rest
+		} else {
+			out[i] = v
+		}
+	}
+	return out
 }
 
 func parsePorts(raw []string) ([]PortMapping, error) {
