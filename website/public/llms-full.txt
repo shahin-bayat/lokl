@@ -264,6 +264,8 @@ services:
 
 #### Health Checks
 
+HTTP check (`health.path`) for web services:
+
 ```yaml
 services:
   api:
@@ -275,6 +277,57 @@ services:
       timeout: 5s
       retries: 3
 ```
+
+Exec check (`health.command`) for data services without HTTP endpoints:
+
+```yaml
+services:
+  db:
+    image: postgres:16
+    health:
+      command: "pg_isready -U myapp"   # string → sh -c wrap
+      interval: 2s
+      timeout: 1s
+      retries: 10
+
+  cache:
+    image: redis:7
+    health:
+      command: ["redis-cli", "ping"]   # array → exec directly (no shell)
+      interval: 1s
+      retries: 5
+```
+
+`health.path` and `health.command` are mutually exclusive — use one or the other.
+
+#### Container Networking
+
+All containers in a lokl project share a bridge network named `lokl-{project-name}`.
+Containers can reach each other using the service name as hostname:
+
+```yaml
+services:
+  api:
+    image: myapp:latest
+    env:
+      DB_HOST: db        # resolves to the "db" container
+      REDIS_HOST: cache  # resolves to the "cache" container
+    depends_on:
+      - db
+      - cache
+  db:
+    image: postgres:16
+    health:
+      command: "pg_isready -U myapp"
+      retries: 10
+  cache:
+    image: redis:7
+    health:
+      command: ["redis-cli", "ping"]
+      retries: 5
+```
+
+The network is created on `lokl up` and removed on `lokl down` (or when the process exits).
 
 #### Environment Variables
 
@@ -507,12 +560,19 @@ services:
       POSTGRES_PASSWORD: secret
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+    health:
+      command: "pg_isready -U postgres"
+      interval: 2s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     port: 6379
+    health:
+      command: ["redis-cli", "ping"]
+      retries: 5
 ```
 
 After `sudo lokl dns setup` and `lokl up`:

@@ -91,7 +91,9 @@ services:
 
 ## Health Checks
 
-Monitor service health:
+### HTTP check (`health.path`)
+
+Monitor HTTP services:
 
 ```yaml
 services:
@@ -104,6 +106,59 @@ services:
       timeout: 5s
       retries: 3
 ```
+
+### Exec check (`health.command`)
+
+For data services that have no HTTP endpoint (databases, caches):
+
+```yaml
+services:
+  db:
+    image: postgres:16
+    health:
+      command: "pg_isready -U myapp"   # string → sh -c wrap
+      interval: 2s
+      timeout: 1s
+      retries: 10
+
+  cache:
+    image: redis:7
+    health:
+      command: ["redis-cli", "ping"]   # array → exec directly (no shell)
+      interval: 1s
+      retries: 5
+```
+
+`path` and `command` are mutually exclusive — use one or the other.
+
+## Container Networking
+
+Containers in the same lokl project share a bridge network (`lokl-{name}`).
+They can reach each other by service name as hostname — no need to expose ports between containers:
+
+```yaml
+services:
+  api:
+    image: myapp:latest
+    env:
+      DB_HOST: db        # reaches the "db" container directly
+      REDIS_HOST: cache  # reaches the "cache" container directly
+    depends_on:
+      - db
+      - cache
+  db:
+    image: postgres:16
+    health:
+      command: "pg_isready -U myapp"
+      retries: 10
+  cache:
+    image: redis:7
+    health:
+      command: ["redis-cli", "ping"]
+      retries: 5
+```
+
+The network is created on `lokl up` and removed on `lokl down`.
 
 ## Environment Variables
 
