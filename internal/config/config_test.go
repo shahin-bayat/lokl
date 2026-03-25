@@ -8,6 +8,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func LoadBytes(data []byte) (*Config, error) {
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	applyDefaults(&cfg)
+	return &cfg, validate(&cfg)
+}
+
 func TestLoad(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -381,5 +390,25 @@ func TestStringOrSliceIsSet(t *testing.T) {
 	set := StringOrSlice{Args: []string{"pg_isready"}}
 	if !set.IsSet() {
 		t.Error("non-empty StringOrSlice should be set")
+	}
+}
+
+func TestValidateHealthMutualExclusion(t *testing.T) {
+	input := `
+name: test
+services:
+  db:
+    image: postgres:16
+    port: 5432
+    health:
+      path: /health
+      command: "pg_isready"
+`
+	_, err := LoadBytes([]byte(input))
+	if err == nil {
+		t.Fatal("expected error when both path and command are set")
+	}
+	if !strings.Contains(err.Error(), "path") || !strings.Contains(err.Error(), "command") {
+		t.Errorf("error should mention both path and command, got: %v", err)
 	}
 }
