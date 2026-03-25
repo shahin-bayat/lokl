@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -283,18 +284,20 @@ func buildExecCmd(s config.StringOrSlice) []string {
 	return s.Args
 }
 
-// absVolumes resolves relative host paths in volume mappings to absolute paths.
-// Docker requires absolute host paths for bind mounts.
+// absVolumes resolves relative host paths in volume mappings to absolute paths
+// and pre-creates the host directory if it doesn't exist.
+// Docker requires absolute host paths; Docker Desktop won't auto-create missing dirs.
 func absVolumes(raw []string) []string {
 	out := make([]string, len(raw))
 	for i, v := range raw {
 		host, rest, ok := strings.Cut(v, ":")
-		if ok && !filepath.IsAbs(host) {
-			if abs, err := filepath.Abs(host); err == nil {
-				host = abs
-			}
-		}
 		if ok {
+			if !filepath.IsAbs(host) {
+				if abs, err := filepath.Abs(host); err == nil {
+					host = abs
+				}
+			}
+			_ = os.MkdirAll(host, 0o755)
 			out[i] = host + ":" + rest
 		} else {
 			out[i] = v
