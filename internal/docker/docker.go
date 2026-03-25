@@ -6,13 +6,14 @@ import (
 )
 
 type ContainerConfig struct {
-	Name    string
-	Image   string
-	Env     map[string]string
-	Ports   []PortMapping
-	Volumes []string
-	Labels  map[string]string
-	Network string // "lokl-{project}"; empty = default bridge
+	Name           string
+	Image          string
+	Env            map[string]string
+	Ports          []PortMapping
+	Volumes        []string
+	Labels         map[string]string
+	Network        string   // "lokl-{project}"; empty = default bridge
+	NetworkAliases []string // DNS aliases inside the project network (e.g. service name)
 }
 
 type PortMapping struct {

@@ -108,13 +108,14 @@ func (c *Container) Start() error {
 	}
 
 	cfg := ContainerConfig{
-		Name:    containerName,
-		Image:   c.config.Image,
-		Env:     c.config.Env,
-		Ports:   ports,
-		Volumes: c.config.Volumes,
-		Labels:  map[string]string{containerLabel: c.name},
-		Network: c.network,
+		Name:           containerName,
+		Image:          c.config.Image,
+		Env:            c.config.Env,
+		Ports:          ports,
+		Volumes:        c.config.Volumes,
+		Labels:         map[string]string{containerLabel: c.name},
+		Network:        c.network,
+		NetworkAliases: []string{c.name},
 	}
 
 	id, err := c.api.CreateContainer(ctx, cfg)
