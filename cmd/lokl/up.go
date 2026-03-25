@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -50,6 +51,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	var dockerClient *docker.Client
+	var projectNetwork string
+
 	for _, svc := range cfg.Services {
 		if svc.Image != "" {
 			dockerClient, err = docker.NewClient()
@@ -57,7 +60,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("docker required but unavailable: %w", err)
 			}
 			defer func() { _ = dockerClient.Close() }()
-			break
+
+			projectNetwork = "lokl-" + cfg.Name
+			if err := dockerClient.EnsureProjectNetwork(context.Background(), projectNetwork); err != nil {
+				return fmt.Errorf("creating project network: %w", err)
+			}
+			break // load-bearing: single call guaranteed; idempotency handles crash recovery
 		}
 	}
 
@@ -65,7 +73,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	pf := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
 		var r supervisor.ProcessRunner
 		if svc.Image != "" {
-			r = docker.NewContainer(name, svc, dockerClient, "", onChange)
+			r = docker.NewContainer(name, svc, dockerClient, projectNetwork, onChange)
 		} else {
 			r = process.New(name, svc, onChange)
 		}
@@ -88,6 +96,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: failed to write lock file: %v\n", err)
 	}
 	defer func() { _ = lockfile.Remove(cfg.Name) }()
+	if projectNetwork != "" {
+		defer func() { _ = dockerClient.RemoveNetwork(context.Background(), projectNetwork) }()
+	}
 
 	if detach {
 		sigCh := make(chan os.Signal, 1)
