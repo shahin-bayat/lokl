@@ -241,8 +241,36 @@ func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
 }
 
 func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string) (int, error) {
-	// TODO: implement container exec
-	return 0, nil
+	exec, err := c.api.ExecCreate(ctx, id, client.ExecCreateOptions{
+		Cmd:          cmd,
+		AttachStdout: false,
+		AttachStderr: false,
+		AttachStdin:  false,
+	})
+	if err != nil {
+		return -1, fmt.Errorf("exec create: %w", err)
+	}
+
+	// Detach: true returns immediately; we then poll ExecInspect for completion.
+	if _, err := c.api.ExecStart(ctx, exec.ID, client.ExecStartOptions{Detach: true}); err != nil {
+		return -1, fmt.Errorf("exec start: %w", err)
+	}
+
+	// Poll until exec completes or ctx is cancelled.
+	for {
+		insp, err := c.api.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
+		if err != nil {
+			return -1, fmt.Errorf("exec inspect: %w", err)
+		}
+		if !insp.Running {
+			return insp.ExitCode, nil
+		}
+		select {
+		case <-ctx.Done():
+			return -1, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 func shortID(id string) string {
