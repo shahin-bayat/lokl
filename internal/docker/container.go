@@ -96,6 +96,12 @@ func (c *Container) Start() error {
 		}
 	}
 
+	volumes, err := absVolumes(c.config.Volumes)
+	if err != nil {
+		c.setFailed()
+		return fmt.Errorf("container %s: %w", c.name, err)
+	}
+
 	ports, err := parsePorts(c.config.Ports)
 	if err != nil {
 		c.setFailed()
@@ -114,7 +120,7 @@ func (c *Container) Start() error {
 		Image:          c.config.Image,
 		Env:            c.config.Env,
 		Ports:          ports,
-		Volumes:        absVolumes(c.config.Volumes),
+		Volumes:        volumes,
 		Labels:         map[string]string{containerLabel: c.name},
 		Network:        c.network,
 		NetworkAliases: []string{c.name},
@@ -287,7 +293,7 @@ func buildExecCmd(s config.StringOrSlice) []string {
 // absVolumes resolves relative host paths in volume mappings to absolute paths
 // and pre-creates the host directory if it doesn't exist.
 // Docker requires absolute host paths; Docker Desktop won't auto-create missing dirs.
-func absVolumes(raw []string) []string {
+func absVolumes(raw []string) ([]string, error) {
 	out := make([]string, len(raw))
 	for i, v := range raw {
 		host, rest, ok := strings.Cut(v, ":")
@@ -297,13 +303,15 @@ func absVolumes(raw []string) []string {
 					host = abs
 				}
 			}
-			_ = os.MkdirAll(host, 0o755)
+			if err := os.MkdirAll(host, 0o755); err != nil {
+				return nil, fmt.Errorf("creating volume directory %q: %w", host, err)
+			}
 			out[i] = host + ":" + rest
 		} else {
 			out[i] = v
 		}
 	}
-	return out
+	return out, nil
 }
 
 func parsePorts(raw []string) ([]PortMapping, error) {
