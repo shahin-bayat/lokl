@@ -24,6 +24,9 @@ type mockAPI struct {
 	IsContainerRunningFn  func(ctx context.Context, id string) (bool, error)
 	StreamLogsFn          func(ctx context.Context, id string, follow bool) (io.ReadCloser, error)
 	CloseFn               func() error
+	EnsureProjectNetworkFn func(ctx context.Context, name string) error
+	RemoveNetworkFn        func(ctx context.Context, name string) error
+	ExecContainerFn        func(ctx context.Context, id string, cmd []string) (int, error)
 }
 
 func (m *mockAPI) PullImage(ctx context.Context, image string, onProgress func(string)) error {
@@ -94,6 +97,27 @@ func (m *mockAPI) Close() error {
 		return m.CloseFn()
 	}
 	return nil
+}
+
+func (m *mockAPI) EnsureProjectNetwork(ctx context.Context, name string) error {
+	if m.EnsureProjectNetworkFn != nil {
+		return m.EnsureProjectNetworkFn(ctx, name)
+	}
+	return nil
+}
+
+func (m *mockAPI) RemoveNetwork(ctx context.Context, name string) error {
+	if m.RemoveNetworkFn != nil {
+		return m.RemoveNetworkFn(ctx, name)
+	}
+	return nil
+}
+
+func (m *mockAPI) ExecContainer(ctx context.Context, id string, cmd []string) (int, error) {
+	if m.ExecContainerFn != nil {
+		return m.ExecContainerFn(ctx, id, cmd)
+	}
+	return 0, nil
 }
 
 func TestContainerStartStop(t *testing.T) {

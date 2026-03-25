@@ -210,6 +210,21 @@ func isNotFoundError(err error) bool {
 	return strings.Contains(errStr, "not found") || strings.Contains(errStr, "No such")
 }
 
+func (c *Client) EnsureProjectNetwork(ctx context.Context, name string) error {
+	// TODO: implement network creation
+	return nil
+}
+
+func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
+	// TODO: implement network removal
+	return nil
+}
+
+func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string) (int, error) {
+	// TODO: implement container exec
+	return 0, nil
+}
+
 func shortID(id string) string {
 	if len(id) > 12 {
 		return id[:12]
