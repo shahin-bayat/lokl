@@ -6,7 +6,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/shahin-bayat/lokl/internal/config"
 )
@@ -401,6 +403,86 @@ func TestContainerStartWithEnv(t *testing.T) {
 	}
 	if gotCfg.Env["NODE_ENV"] != "production" {
 		t.Errorf("NODE_ENV = %q, want production", gotCfg.Env["NODE_ENV"])
+	}
+}
+
+func TestContainerExecHealthCheck(t *testing.T) {
+	execCalls := 0
+	mock := &mockAPI{
+		ExecContainerFn: func(_ context.Context, _ string, cmd []string) (int, error) {
+			execCalls++
+			// Healthy after 2nd call.
+			if execCalls >= 2 {
+				return 0, nil
+			}
+			return 1, nil
+		},
+	}
+
+	retries := 5
+	svc := config.Service{
+		Image: "postgres:16",
+		Health: &config.HealthConfig{
+			Command:  config.StringOrSlice{Args: []string{"pg_isready", "-U", "postgres"}, Shell: false},
+			Interval: "10ms",
+			Timeout:  "100ms",
+			Retries:  &retries,
+		},
+	}
+
+	healthyCh := make(chan struct{}, 1)
+	var c *Container
+	c = NewContainer("db", svc, mock, "", func() {
+		if c.IsHealthy() {
+			select {
+			case healthyCh <- struct{}{}:
+			default:
+			}
+		}
+	})
+
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	select {
+	case <-healthyCh:
+		// pass
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for healthy")
+	}
+}
+
+func TestBuildExecCmd(t *testing.T) {
+	tests := []struct {
+		name  string
+		input config.StringOrSlice
+		want  []string
+	}{
+		{
+			name:  "array form — exec verbatim",
+			input: config.StringOrSlice{Args: []string{"redis-cli", "ping"}, Shell: false},
+			want:  []string{"redis-cli", "ping"},
+		},
+		{
+			name:  "string form — sh -c wrap",
+			input: config.StringOrSlice{Args: []string{"pg_isready", "-U", "postgres"}, Shell: true},
+			want:  []string{"sh", "-c", "pg_isready -U postgres"},
+		},
+		{
+			name:  "single-element array — exec verbatim",
+			input: config.StringOrSlice{Args: []string{"pg_isready"}, Shell: false},
+			want:  []string{"pg_isready"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildExecCmd(tt.input)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

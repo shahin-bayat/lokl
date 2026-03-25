@@ -18,6 +18,7 @@ const (
 	stopTimeout    = 10
 	watchInterval  = 2 * time.Second
 	containerLabel = "lokl-service"
+	defaultRetries = 3
 )
 
 type Container struct {
@@ -140,17 +141,42 @@ func (c *Container) Start() error {
 	go c.streamLogs(runCtx, id)
 	go c.watchContainer(runCtx, id)
 
-	if c.config.Health != nil && c.config.Health.Path != "" {
+	switch {
+	case c.config.Health != nil && c.config.Health.Command.IsSet():
+		cmd := buildExecCmd(c.config.Health.Command)
 		interval, _ := time.ParseDuration(c.config.Health.Interval)
 		timeout, _ := time.ParseDuration(c.config.Health.Timeout)
-		retries := *c.config.Health.Retries
+		retries := defaultRetries
+		if c.config.Health.Retries != nil {
+			retries = *c.config.Health.Retries
+		}
+		go runner.RunProbe(runCtx, func() bool {
+			execCtx, cancel := context.WithTimeout(runCtx, timeout)
+			defer cancel()
+			code, err := c.api.ExecContainer(execCtx, id, cmd)
+			return err == nil && code == 0
+		}, interval, timeout, retries, func(healthy bool) {
+			c.mu.Lock()
+			c.healthy = healthy
+			c.mu.Unlock()
+			c.onChange()
+		})
+
+	case c.config.Health != nil && c.config.Health.Path != "":
+		interval, _ := time.ParseDuration(c.config.Health.Interval)
+		timeout, _ := time.ParseDuration(c.config.Health.Timeout)
+		retries := defaultRetries
+		if c.config.Health.Retries != nil {
+			retries = *c.config.Health.Retries
+		}
 		go runner.RunHealthCheck(runCtx, c.config.Port, c.config.Health.Path, interval, timeout, retries, func(healthy bool) {
 			c.mu.Lock()
 			c.healthy = healthy
 			c.mu.Unlock()
 			c.onChange()
 		})
-	} else {
+
+	default:
 		c.mu.Lock()
 		c.healthy = true
 		c.mu.Unlock()
@@ -246,6 +272,13 @@ func (c *Container) setFailed() {
 func (c *Container) logf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	_, _ = c.logs.Write([]byte(msg + "\n"))
+}
+
+func buildExecCmd(s config.StringOrSlice) []string {
+	if s.Shell {
+		return []string{"sh", "-c", strings.Join(s.Args, " ")}
+	}
+	return s.Args
 }
 
 func parsePorts(raw []string) ([]PortMapping, error) {
