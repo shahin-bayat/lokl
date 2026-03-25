@@ -211,12 +211,32 @@ func isNotFoundError(err error) bool {
 }
 
 func (c *Client) EnsureProjectNetwork(ctx context.Context, name string) error {
-	// TODO: implement network creation
+	result, err := c.api.NetworkList(ctx, client.NetworkListOptions{
+		Filters: make(client.Filters).Add("name", name),
+	})
+	if err != nil {
+		return fmt.Errorf("listing networks: %w", err)
+	}
+	for _, n := range result.Items {
+		if n.Name == name {
+			return nil // already exists
+		}
+	}
+	if _, err := c.api.NetworkCreate(ctx, name, client.NetworkCreateOptions{
+		Driver: "bridge",
+	}); err != nil {
+		return fmt.Errorf("creating network %q: %w", name, err)
+	}
 	return nil
 }
 
 func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
-	// TODO: implement network removal
+	if _, err := c.api.NetworkRemove(ctx, name, client.NetworkRemoveOptions{}); err != nil {
+		if isNotFoundError(err) {
+			return nil
+		}
+		return fmt.Errorf("removing network %q: %w", name, err)
+	}
 	return nil
 }
 
