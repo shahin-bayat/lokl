@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	connectTimeout = 5 * time.Second
-	labelManagedBy = "managed-by"
-	labelManagedV  = "lokl"
+	connectTimeout   = 5 * time.Second
+	execPollInterval = 100 * time.Millisecond
+	labelManagedBy   = "managed-by"
+	labelManagedV    = "lokl"
 )
 
 var _ DockerAPI = (*Client)(nil)
@@ -252,10 +253,9 @@ func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
 	return nil
 }
 
-func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string, env []string) (int, error) {
+func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string) (int, error) {
 	exec, err := c.api.ExecCreate(ctx, id, client.ExecCreateOptions{
 		Cmd:          cmd,
-		Env:          env,
 		AttachStdout: false,
 		AttachStderr: false,
 		AttachStdin:  false,
@@ -270,6 +270,8 @@ func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string, env
 	}
 
 	// Poll until exec completes or ctx is cancelled.
+	timer := time.NewTimer(execPollInterval)
+	defer timer.Stop()
 	for {
 		insp, err := c.api.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
 		if err != nil {
@@ -281,7 +283,8 @@ func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string, env
 		select {
 		case <-ctx.Done():
 			return -1, ctx.Err()
-		case <-time.After(100 * time.Millisecond):
+		case <-timer.C:
+			timer.Reset(execPollInterval)
 		}
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -67,7 +66,7 @@ type StringOrSlice struct {
 func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	case yaml.ScalarNode:
-		s.Args = strings.Fields(value.Value)
+		s.Args = []string{value.Value}
 		s.Shell = true
 	case yaml.SequenceNode:
 		s.Shell = false

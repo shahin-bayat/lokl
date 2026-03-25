@@ -40,5 +40,5 @@ type DockerAPI interface {
 	RemoveNetwork(ctx context.Context, name string) error
 	// ExecContainer execs cmd inside the running container and returns the exit code.
 	// cmd is taken verbatim — shell wrapping is the caller's responsibility.
-	ExecContainer(ctx context.Context, id string, cmd []string, env []string) (int, error)
+	ExecContainer(ctx context.Context, id string, cmd []string) (int, error)
 }

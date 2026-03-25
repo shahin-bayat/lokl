@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"testing"
 )
@@ -51,16 +52,12 @@ func TestChownToSudoUser_CurrentUser(t *testing.T) {
 			t.Fatalf("stat %s: %v", path, err)
 		}
 		stat := info.Sys().(*syscall.Stat_t)
-		if got := int(stat.Uid); got != mustAtoi(u.Uid) {
-			t.Errorf("%s: uid = %d, want %d", path, got, mustAtoi(u.Uid))
+		wantUID, err := strconv.Atoi(u.Uid)
+		if err != nil {
+			t.Fatalf("parse uid %q: %v", u.Uid, err)
+		}
+		if got := int(stat.Uid); got != wantUID {
+			t.Errorf("%s: uid = %d, want %d", path, got, wantUID)
 		}
 	}
-}
-
-func mustAtoi(s string) int {
-	n := 0
-	for _, c := range s {
-		n = n*10 + int(c-'0')
-	}
-	return n
 }

@@ -153,16 +153,11 @@ func (c *Container) Start() error {
 	switch {
 	case c.config.Health != nil && c.config.Health.Command.IsSet():
 		cmd := buildExecCmd(expandHealthCmd(c.config.Health.Command, c.config.Env))
-		interval, _ := time.ParseDuration(c.config.Health.Interval)
-		timeout, _ := time.ParseDuration(c.config.Health.Timeout)
-		retries := defaultRetries
-		if c.config.Health.Retries != nil {
-			retries = *c.config.Health.Retries
-		}
+		interval, timeout, retries := parseHealthParams(c.config.Health)
 		go runner.RunProbe(runCtx, func() bool {
 			execCtx, cancel := context.WithTimeout(runCtx, timeout)
 			defer cancel()
-			code, err := c.api.ExecContainer(execCtx, id, cmd, nil)
+			code, err := c.api.ExecContainer(execCtx, id, cmd)
 			if err != nil || code != 0 {
 				c.logf("health exec: code=%d err=%v", code, err)
 			}
@@ -175,12 +170,7 @@ func (c *Container) Start() error {
 		})
 
 	case c.config.Health != nil && c.config.Health.Path != "":
-		interval, _ := time.ParseDuration(c.config.Health.Interval)
-		timeout, _ := time.ParseDuration(c.config.Health.Timeout)
-		retries := defaultRetries
-		if c.config.Health.Retries != nil {
-			retries = *c.config.Health.Retries
-		}
+		interval, timeout, retries := parseHealthParams(c.config.Health)
 		go runner.RunHealthCheck(runCtx, c.config.Port, c.config.Health.Path, interval, timeout, retries, func(healthy bool) {
 			c.mu.Lock()
 			c.healthy = healthy
@@ -284,6 +274,16 @@ func (c *Container) setFailed() {
 func (c *Container) logf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	_, _ = c.logs.Write([]byte(msg + "\n"))
+}
+
+func parseHealthParams(h *config.HealthConfig) (interval, timeout time.Duration, retries int) {
+	interval, _ = time.ParseDuration(h.Interval)
+	timeout, _ = time.ParseDuration(h.Timeout)
+	retries = defaultRetries
+	if h.Retries != nil {
+		retries = *h.Retries
+	}
+	return
 }
 
 func buildExecCmd(s config.StringOrSlice) []string {

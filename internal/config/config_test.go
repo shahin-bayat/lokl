@@ -347,7 +347,7 @@ func TestStringOrSliceUnmarshal(t *testing.T) {
 		{
 			name:      "string form",
 			yaml:      `command: "pg_isready -U postgres"`,
-			wantArgs:  []string{"pg_isready", "-U", "postgres"},
+			wantArgs:  []string{"pg_isready -U postgres"},
 			wantShell: true,
 		},
 		{
