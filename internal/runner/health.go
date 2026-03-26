@@ -8,7 +8,7 @@ import (
 )
 
 // RunProbe polls probe() on interval. Calls onChange on every health state transition.
-// Blocks until ctx is cancelled.
+// Blocks until ctx is canceled.
 func RunProbe(ctx context.Context, probe func() bool, interval, timeout time.Duration, retries int, onChange func(bool)) {
 	healthy := false
 	failures := 0

@@ -269,7 +269,7 @@ func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string) (in
 		return -1, fmt.Errorf("exec start: %w", err)
 	}
 
-	// Poll until exec completes or ctx is cancelled.
+	// Poll until exec completes or ctx is canceled.
 	timer := time.NewTimer(execPollInterval)
 	defer timer.Stop()
 	for {

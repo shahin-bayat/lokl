@@ -313,11 +313,13 @@ func expandHealthCmd(s config.StringOrSlice, env map[string]string) config.Strin
 // absVolumes resolves relative host paths in volume mappings to absolute paths
 // and pre-creates the host directory if it doesn't exist.
 // Docker requires absolute host paths; Docker Desktop won't auto-create missing dirs.
+// Named volumes (e.g. "pgdata:/var/lib/...") are passed through unchanged.
 func absVolumes(raw []string) ([]string, error) {
 	out := make([]string, len(raw))
 	for i, v := range raw {
 		host, rest, ok := strings.Cut(v, ":")
-		if ok {
+		if ok && (strings.HasPrefix(host, "/") || strings.HasPrefix(host, ".")) {
+			// Bind mount: resolve to absolute and pre-create.
 			if !filepath.IsAbs(host) {
 				if abs, err := filepath.Abs(host); err == nil {
 					host = abs

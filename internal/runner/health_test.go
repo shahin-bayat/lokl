@@ -111,7 +111,7 @@ func TestRunProbeNeverHealthyOnAlwaysFailing(t *testing.T) {
 }
 
 func TestRunProbeCancellation(t *testing.T) {
-	// Verify RunProbe stops polling after context is cancelled.
+	// Verify RunProbe stops polling after context is canceled.
 	// Use a counter to track probe invocations.
 	probeCount := 0
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
