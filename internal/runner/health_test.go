@@ -128,6 +128,6 @@ func TestRunProbeCancellation(t *testing.T) {
 	// With 100ms timeout and 20ms interval, expect ~5 calls max.
 	// This verifies the context cancellation stopped the polling loop.
 	if probeCount > 10 {
-		t.Errorf("expected RunProbe to stop after context cancelled, got %d probe calls", probeCount)
+		t.Errorf("expected RunProbe to stop after context canceled, got %d probe calls", probeCount)
 	}
 }
