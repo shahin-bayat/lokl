@@ -99,7 +99,7 @@ func (h *handler) selectTarget(rt *route, r *http.Request) (target *url.URL, tra
 		if rt.rewrite != nil {
 			r.URL.Path = rewritePath(r.URL.Path, rt.rewrite)
 		}
-		return &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", rt.port)}, nil, false, nil
+		return &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", rt.port)}, nil, false, nil
 	}
 
 	transport, err = h.remoteTransport(rt.domain)

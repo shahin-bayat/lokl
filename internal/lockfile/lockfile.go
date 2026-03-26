@@ -110,5 +110,6 @@ func signalProcesses(e *Entry, sig syscall.Signal) {
 func stopContainers(e *Entry) {
 	for _, name := range e.Containers {
 		_ = exec.Command("docker", "stop", name).Run()
+		_ = exec.Command("docker", "rm", name).Run()
 	}
 }

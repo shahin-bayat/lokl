@@ -1,9 +1,21 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
+
+func LoadBytes(data []byte) (*Config, error) {
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	applyDefaults(&cfg)
+	return &cfg, validate(&cfg)
+}
 
 func TestLoad(t *testing.T) {
 	tests := []struct {
@@ -322,5 +334,137 @@ func TestApplyDefaults(t *testing.T) {
 	}
 	if svcB.Health.Retries == nil || *svcB.Health.Retries != 3 {
 		t.Error("health.retries should default to 3")
+	}
+}
+
+func TestStringOrSliceUnmarshal(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantArgs  []string
+		wantShell bool
+	}{
+		{
+			name:      "string form",
+			yaml:      `command: "pg_isready -U postgres"`,
+			wantArgs:  []string{"pg_isready -U postgres"},
+			wantShell: true,
+		},
+		{
+			name:      "array form",
+			yaml:      `command: ["redis-cli", "ping"]`,
+			wantArgs:  []string{"redis-cli", "ping"},
+			wantShell: false,
+		},
+		{
+			name:      "single-element array",
+			yaml:      `command: ["pg_isready"]`,
+			wantArgs:  []string{"pg_isready"},
+			wantShell: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			type wrapper struct {
+				Command StringOrSlice `yaml:"command"`
+			}
+			var w wrapper
+			if err := yaml.Unmarshal([]byte(tt.yaml), &w); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if !slices.Equal(w.Command.Args, tt.wantArgs) {
+				t.Errorf("args = %v, want %v", w.Command.Args, tt.wantArgs)
+			}
+			if w.Command.Shell != tt.wantShell {
+				t.Errorf("shell = %v, want %v", w.Command.Shell, tt.wantShell)
+			}
+		})
+	}
+}
+
+func TestStringOrSliceIsSet(t *testing.T) {
+	empty := StringOrSlice{}
+	if empty.IsSet() {
+		t.Error("empty StringOrSlice should not be set")
+	}
+	set := StringOrSlice{Args: []string{"pg_isready"}}
+	if !set.IsSet() {
+		t.Error("non-empty StringOrSlice should be set")
+	}
+}
+
+func TestValidateHealthEmptyCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name: "empty string command",
+			input: `
+name: test
+services:
+  db:
+    image: postgres:16
+    health:
+      command: ""
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty array element",
+			input: `
+name: test
+services:
+  db:
+    image: postgres:16
+    health:
+      command: [""]
+`,
+			wantErr: true,
+		},
+		{
+			name: "valid command",
+			input: `
+name: test
+services:
+  db:
+    image: postgres:16
+    health:
+      command: "pg_isready"
+`,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadBytes([]byte(tt.input))
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateHealthMutualExclusion(t *testing.T) {
+	input := `
+name: test
+services:
+  db:
+    image: postgres:16
+    port: 5432
+    health:
+      path: /health
+      command: "pg_isready"
+`
+	_, err := LoadBytes([]byte(input))
+	if err == nil {
+		t.Fatal("expected error when both path and command are set")
+	}
+	if !strings.Contains(err.Error(), "path") || !strings.Contains(err.Error(), "command") {
+		t.Errorf("error should mention both path and command, got: %v", err)
 	}
 }

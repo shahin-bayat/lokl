@@ -10,6 +10,8 @@ lokl reads a single `lokl.yaml` config file and:
 - Manages `/etc/hosts` DNS entries for custom `.dev` domains
 - Shows a live TUI with service status, health checks, and log viewer
 - Handles startup dependencies (`depends_on`), health checks, and environment variables
+- Exec-based health checks (`health.command`) for data services without HTTP endpoints
+- Shared Docker bridge network (`lokl-{name}`) for container-to-container communication by service name
 
 ## Key differentiators
 
@@ -98,7 +100,15 @@ services:
       POSTGRES_PASSWORD: secret
     volumes:
       - ./data:/var/lib/postgresql/data
+    health:
+      command: "pg_isready -U postgres"
+      interval: 2s
+      retries: 10
 ```
+
+`health.path` and `health.command` are mutually exclusive. Use `health.command` for data services (databases, caches) that have no HTTP endpoint. String form wraps in `sh -c`; array form execs directly.
+
+Containers in the same lokl project share a bridge network (`lokl-{name}`). Reach other containers by service name (e.g., `DB_HOST: db`).
 
 ## CLI commands
 

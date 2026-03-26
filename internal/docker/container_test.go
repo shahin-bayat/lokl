@@ -6,7 +6,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/shahin-bayat/lokl/internal/config"
 )
@@ -14,16 +17,20 @@ import (
 var _ DockerAPI = (*mockAPI)(nil)
 
 type mockAPI struct {
-	PullImageFn           func(ctx context.Context, image string, onProgress func(string)) error
-	ImageExistsFn         func(ctx context.Context, image string) (bool, error)
-	FindContainerByNameFn func(ctx context.Context, name string) (string, error)
-	CreateContainerFn     func(ctx context.Context, cfg ContainerConfig) (string, error)
-	StartContainerFn      func(ctx context.Context, id string) error
-	StopContainerFn       func(ctx context.Context, id string, timeoutSeconds int) error
-	RemoveContainerFn     func(ctx context.Context, id string) error
-	IsContainerRunningFn  func(ctx context.Context, id string) (bool, error)
-	StreamLogsFn          func(ctx context.Context, id string, follow bool) (io.ReadCloser, error)
-	CloseFn               func() error
+	PullImageFn            func(ctx context.Context, image string, onProgress func(string)) error
+	ImageExistsFn          func(ctx context.Context, image string) (bool, error)
+	FindContainerByNameFn  func(ctx context.Context, name string) (string, error)
+	CreateContainerFn      func(ctx context.Context, cfg ContainerConfig) (string, error)
+	StartContainerFn       func(ctx context.Context, id string) error
+	StopContainerFn        func(ctx context.Context, id string, timeoutSeconds int) error
+	RemoveContainerFn      func(ctx context.Context, id string) error
+	IsContainerRunningFn   func(ctx context.Context, id string) (bool, error)
+	StreamLogsFn           func(ctx context.Context, id string, follow bool) (io.ReadCloser, error)
+	CloseFn                func() error
+	EnsureProjectNetworkFn func(ctx context.Context, name string) error
+	RemoveNetworkFn        func(ctx context.Context, name string) error
+	ExecContainerFn        func(ctx context.Context, id string, cmd []string) (int, error)
+	NetworkConnectFn       func(ctx context.Context, networkID string, opts interface{}) (interface{}, error)
 }
 
 func (m *mockAPI) PullImage(ctx context.Context, image string, onProgress func(string)) error {
@@ -96,8 +103,36 @@ func (m *mockAPI) Close() error {
 	return nil
 }
 
+func (m *mockAPI) EnsureProjectNetwork(ctx context.Context, name string) error {
+	if m.EnsureProjectNetworkFn != nil {
+		return m.EnsureProjectNetworkFn(ctx, name)
+	}
+	return nil
+}
+
+func (m *mockAPI) RemoveNetwork(ctx context.Context, name string) error {
+	if m.RemoveNetworkFn != nil {
+		return m.RemoveNetworkFn(ctx, name)
+	}
+	return nil
+}
+
+func (m *mockAPI) ExecContainer(ctx context.Context, id string, cmd []string) (int, error) {
+	if m.ExecContainerFn != nil {
+		return m.ExecContainerFn(ctx, id, cmd)
+	}
+	return 0, nil
+}
+
+func (m *mockAPI) NetworkConnect(ctx context.Context, networkID string, opts interface{}) (interface{}, error) {
+	if m.NetworkConnectFn != nil {
+		return m.NetworkConnectFn(ctx, networkID, opts)
+	}
+	return nil, nil
+}
+
 func TestContainerStartStop(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
 
 	if c.IsRunning() {
 		t.Fatal("expected not running before start")
@@ -136,7 +171,7 @@ func TestContainerStartPullsImage(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx:latest"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx:latest"}, mock, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -163,7 +198,7 @@ func TestContainerStartCleansStaleContainer(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -184,7 +219,7 @@ func TestContainerStartCreateError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from start")
 	}
@@ -194,7 +229,7 @@ func TestContainerStartCreateError(t *testing.T) {
 }
 
 func TestContainerStartAlreadyRunning(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("first start: %v", err)
 	}
@@ -206,7 +241,7 @@ func TestContainerStartAlreadyRunning(t *testing.T) {
 }
 
 func TestContainerStopWhenStopped(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
 	if err := c.Stop(); err != nil {
 		t.Fatalf("stop when already stopped: %v", err)
 	}
@@ -296,7 +331,7 @@ func TestContainerStartPullError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from pull failure")
 	}
@@ -312,7 +347,7 @@ func TestContainerStartImageCheckError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from image check failure")
 	}
@@ -333,7 +368,7 @@ func TestContainerStartContainerStartError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from container start failure")
 	}
@@ -358,7 +393,7 @@ func TestContainerStartWithEnv(t *testing.T) {
 		Image: "nginx",
 		Env:   map[string]string{"NODE_ENV": "production", "PORT": "3000"},
 	}
-	c := NewContainer("web", svc, mock, func() {})
+	c := NewContainer("web", svc, mock, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -369,6 +404,86 @@ func TestContainerStartWithEnv(t *testing.T) {
 	}
 	if gotCfg.Env["NODE_ENV"] != "production" {
 		t.Errorf("NODE_ENV = %q, want production", gotCfg.Env["NODE_ENV"])
+	}
+}
+
+func TestContainerExecHealthCheck(t *testing.T) {
+	execCalls := 0
+	mock := &mockAPI{
+		ExecContainerFn: func(_ context.Context, _ string, cmd []string) (int, error) {
+			execCalls++
+			// Healthy after 2nd call.
+			if execCalls >= 2 {
+				return 0, nil
+			}
+			return 1, nil
+		},
+	}
+
+	retries := 5
+	svc := config.Service{
+		Image: "postgres:16",
+		Health: &config.HealthConfig{
+			Command:  config.StringOrSlice{Args: []string{"pg_isready", "-U", "postgres"}, Shell: false},
+			Interval: "10ms",
+			Timeout:  "100ms",
+			Retries:  &retries,
+		},
+	}
+
+	healthyCh := make(chan struct{}, 1)
+	var c *Container
+	c = NewContainer("db", svc, mock, "", func() {
+		if c.IsHealthy() {
+			select {
+			case healthyCh <- struct{}{}:
+			default:
+			}
+		}
+	})
+
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	select {
+	case <-healthyCh:
+		// pass
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for healthy")
+	}
+}
+
+func TestBuildExecCmd(t *testing.T) {
+	tests := []struct {
+		name  string
+		input config.StringOrSlice
+		want  []string
+	}{
+		{
+			name:  "array form — exec verbatim",
+			input: config.StringOrSlice{Args: []string{"redis-cli", "ping"}, Shell: false},
+			want:  []string{"redis-cli", "ping"},
+		},
+		{
+			name:  "string form — sh -c wrap",
+			input: config.StringOrSlice{Args: []string{"pg_isready", "-U", "postgres"}, Shell: true},
+			want:  []string{"sh", "-c", "pg_isready -U postgres"},
+		},
+		{
+			name:  "single-element array — exec verbatim",
+			input: config.StringOrSlice{Args: []string{"pg_isready"}, Shell: false},
+			want:  []string{"pg_isready"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildExecCmd(tt.input)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -386,7 +501,7 @@ func TestContainerStartWithVolumes(t *testing.T) {
 		Volumes: []string{"./data:/var/lib/postgresql/data"},
 		Ports:   []string{"5432:5432"},
 	}
-	c := NewContainer("db", svc, mock, func() {})
+	c := NewContainer("db", svc, mock, "", func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -395,8 +510,9 @@ func TestContainerStartWithVolumes(t *testing.T) {
 	if len(gotCfg.Volumes) != 1 {
 		t.Errorf("volumes count = %d, want 1", len(gotCfg.Volumes))
 	}
-	if gotCfg.Volumes[0] != "./data:/var/lib/postgresql/data" {
-		t.Errorf("volume = %q, want ./data:/var/lib/postgresql/data", gotCfg.Volumes[0])
+	// Relative host paths are resolved to absolute by absVolumes.
+	if !strings.HasSuffix(gotCfg.Volumes[0], "/data:/var/lib/postgresql/data") {
+		t.Errorf("volume = %q, want suffix /data:/var/lib/postgresql/data", gotCfg.Volumes[0])
 	}
 	if len(gotCfg.Ports) != 1 || gotCfg.Ports[0].Host != 5432 {
 		t.Errorf("ports = %+v, want [{5432 5432 }]", gotCfg.Ports)

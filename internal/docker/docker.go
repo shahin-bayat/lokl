@@ -6,12 +6,14 @@ import (
 )
 
 type ContainerConfig struct {
-	Name    string
-	Image   string
-	Env     map[string]string
-	Ports   []PortMapping
-	Volumes []string
-	Labels  map[string]string
+	Name           string
+	Image          string
+	Env            map[string]string
+	Ports          []PortMapping
+	Volumes        []string
+	Labels         map[string]string
+	Network        string   // "lokl-{project}"; empty = default bridge
+	NetworkAliases []string // DNS aliases inside the project network (e.g. service name)
 }
 
 type PortMapping struct {
@@ -34,4 +36,9 @@ type DockerAPI interface {
 	StreamLogs(ctx context.Context, id string, follow bool) (io.ReadCloser, error)
 
 	Close() error
+	EnsureProjectNetwork(ctx context.Context, name string) error
+	RemoveNetwork(ctx context.Context, name string) error
+	// ExecContainer execs cmd inside the running container and returns the exit code.
+	// cmd is taken verbatim — shell wrapping is the caller's responsibility.
+	ExecContainer(ctx context.Context, id string, cmd []string) (int, error)
 }

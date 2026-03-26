@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/docker"
 	"github.com/shahin-bayat/lokl/internal/lockfile"
 )
 
@@ -34,5 +36,13 @@ func runDown(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("stopping %d service(s)...\n", len(entry.Processes)+len(entry.Containers))
 	lockfile.Kill(entry)
+
+	if len(entry.Containers) > 0 {
+		if dc, err := docker.NewClient(); err == nil {
+			_ = dc.RemoveNetwork(context.Background(), "lokl-"+entry.Project)
+			_ = dc.Close()
+		}
+	}
+
 	return lockfile.Remove(cfg.Name)
 }

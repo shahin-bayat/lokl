@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	connectTimeout = 5 * time.Second
-	labelManagedBy = "managed-by"
-	labelManagedV  = "lokl"
+	connectTimeout   = 5 * time.Second
+	execPollInterval = 100 * time.Millisecond
+	labelManagedBy   = "managed-by"
+	labelManagedV    = "lokl"
 )
 
 var _ DockerAPI = (*Client)(nil)
@@ -147,6 +148,18 @@ func (c *Client) CreateContainer(ctx context.Context, cfg ContainerConfig) (stri
 		return "", fmt.Errorf("creating container: %w", err)
 	}
 
+	if cfg.Network != "" {
+		if _, err := c.api.NetworkConnect(ctx, cfg.Network, client.NetworkConnectOptions{
+			Container: resp.ID,
+			EndpointConfig: &network.EndpointSettings{
+				Aliases: cfg.NetworkAliases,
+			},
+		}); err != nil {
+			_ = c.RemoveContainer(ctx, resp.ID)
+			return "", fmt.Errorf("attaching container to network %q: %w", cfg.Network, err)
+		}
+	}
+
 	return resp.ID, nil
 }
 
@@ -208,6 +221,72 @@ func isNotFoundError(err error) bool {
 	}
 	errStr := err.Error()
 	return strings.Contains(errStr, "not found") || strings.Contains(errStr, "No such")
+}
+
+func (c *Client) EnsureProjectNetwork(ctx context.Context, name string) error {
+	result, err := c.api.NetworkList(ctx, client.NetworkListOptions{
+		Filters: make(client.Filters).Add("name", name),
+	})
+	if err != nil {
+		return fmt.Errorf("listing networks: %w", err)
+	}
+	for _, n := range result.Items {
+		if n.Name == name {
+			return nil // already exists
+		}
+	}
+	if _, err := c.api.NetworkCreate(ctx, name, client.NetworkCreateOptions{
+		Driver: "bridge",
+	}); err != nil {
+		return fmt.Errorf("creating network %q: %w", name, err)
+	}
+	return nil
+}
+
+func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
+	if _, err := c.api.NetworkRemove(ctx, name, client.NetworkRemoveOptions{}); err != nil {
+		if isNotFoundError(err) {
+			return nil
+		}
+		return fmt.Errorf("removing network %q: %w", name, err)
+	}
+	return nil
+}
+
+func (c *Client) ExecContainer(ctx context.Context, id string, cmd []string) (int, error) {
+	exec, err := c.api.ExecCreate(ctx, id, client.ExecCreateOptions{
+		Cmd:          cmd,
+		AttachStdout: false,
+		AttachStderr: false,
+		AttachStdin:  false,
+	})
+	if err != nil {
+		return -1, fmt.Errorf("exec create: %w", err)
+	}
+
+	// Detach: true returns immediately; we then poll ExecInspect for completion.
+	if _, err := c.api.ExecStart(ctx, exec.ID, client.ExecStartOptions{Detach: true}); err != nil {
+		return -1, fmt.Errorf("exec start: %w", err)
+	}
+
+	// Poll until exec completes or ctx is canceled.
+	timer := time.NewTimer(execPollInterval)
+	defer timer.Stop()
+	for {
+		insp, err := c.api.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
+		if err != nil {
+			return -1, fmt.Errorf("exec inspect: %w", err)
+		}
+		if !insp.Running {
+			return insp.ExitCode, nil
+		}
+		select {
+		case <-ctx.Done():
+			return -1, ctx.Err()
+		case <-timer.C:
+			timer.Reset(execPollInterval)
+		}
+	}
 }
 
 func shortID(id string) string {

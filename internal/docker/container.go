@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,12 +20,14 @@ const (
 	stopTimeout    = 10
 	watchInterval  = 2 * time.Second
 	containerLabel = "lokl-service"
+	defaultRetries = 3
 )
 
 type Container struct {
 	name     string
 	config   config.Service
 	api      DockerAPI
+	network  string
 	state    runner.State
 	healthy  bool
 	onChange func()
@@ -34,11 +38,12 @@ type Container struct {
 	mu          sync.Mutex
 }
 
-func NewContainer(name string, cfg config.Service, api DockerAPI, onChange func()) *Container {
+func NewContainer(name string, cfg config.Service, api DockerAPI, network string, onChange func()) *Container {
 	return &Container{
 		name:     name,
 		config:   cfg,
 		api:      api,
+		network:  network,
 		state:    runner.StateStopped,
 		onChange: onChange,
 	}
@@ -91,6 +96,12 @@ func (c *Container) Start() error {
 		}
 	}
 
+	volumes, err := absVolumes(c.config.Volumes)
+	if err != nil {
+		c.setFailed()
+		return fmt.Errorf("container %s: %w", c.name, err)
+	}
+
 	ports, err := parsePorts(c.config.Ports)
 	if err != nil {
 		c.setFailed()
@@ -105,12 +116,14 @@ func (c *Container) Start() error {
 	}
 
 	cfg := ContainerConfig{
-		Name:    containerName,
-		Image:   c.config.Image,
-		Env:     c.config.Env,
-		Ports:   ports,
-		Volumes: c.config.Volumes,
-		Labels:  map[string]string{containerLabel: c.name},
+		Name:           containerName,
+		Image:          c.config.Image,
+		Env:            c.config.Env,
+		Ports:          ports,
+		Volumes:        volumes,
+		Labels:         map[string]string{containerLabel: c.name},
+		Network:        c.network,
+		NetworkAliases: []string{c.name},
 	}
 
 	id, err := c.api.CreateContainer(ctx, cfg)
@@ -137,17 +150,35 @@ func (c *Container) Start() error {
 	go c.streamLogs(runCtx, id)
 	go c.watchContainer(runCtx, id)
 
-	if c.config.Health != nil && c.config.Health.Path != "" {
-		interval, _ := time.ParseDuration(c.config.Health.Interval)
-		timeout, _ := time.ParseDuration(c.config.Health.Timeout)
-		retries := *c.config.Health.Retries
+	switch {
+	case c.config.Health != nil && c.config.Health.Command.IsSet():
+		cmd := buildExecCmd(expandHealthCmd(c.config.Health.Command, c.config.Env))
+		interval, timeout, retries := parseHealthParams(c.config.Health)
+		go runner.RunProbe(runCtx, func() bool {
+			execCtx, cancel := context.WithTimeout(runCtx, timeout)
+			defer cancel()
+			code, err := c.api.ExecContainer(execCtx, id, cmd)
+			if err != nil || code != 0 {
+				c.logf("health exec: code=%d err=%v", code, err)
+			}
+			return err == nil && code == 0
+		}, interval, retries, func(healthy bool) {
+			c.mu.Lock()
+			c.healthy = healthy
+			c.mu.Unlock()
+			c.onChange()
+		})
+
+	case c.config.Health != nil && c.config.Health.Path != "":
+		interval, timeout, retries := parseHealthParams(c.config.Health)
 		go runner.RunHealthCheck(runCtx, c.config.Port, c.config.Health.Path, interval, timeout, retries, func(healthy bool) {
 			c.mu.Lock()
 			c.healthy = healthy
 			c.mu.Unlock()
 			c.onChange()
 		})
-	} else {
+
+	default:
 		c.mu.Lock()
 		c.healthy = true
 		c.mu.Unlock()
@@ -243,6 +274,69 @@ func (c *Container) setFailed() {
 func (c *Container) logf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	_, _ = c.logs.Write([]byte(msg + "\n"))
+}
+
+func parseHealthParams(h *config.HealthConfig) (interval, timeout time.Duration, retries int) {
+	interval, _ = time.ParseDuration(h.Interval)
+	timeout, _ = time.ParseDuration(h.Timeout)
+	retries = defaultRetries
+	if h.Retries != nil {
+		retries = *h.Retries
+	}
+	return
+}
+
+func buildExecCmd(s config.StringOrSlice) []string {
+	if s.Shell {
+		return []string{"sh", "-c", strings.Join(s.Args, " ")}
+	}
+	return s.Args
+}
+
+// expandHealthCmd expands ${VAR} references in health command args using the
+// service env map, so exec inherits the container's PATH instead of getting a
+// replacement environment.
+func expandHealthCmd(s config.StringOrSlice, env map[string]string) config.StringOrSlice {
+	lookup := func(key string) string {
+		if v, ok := env[key]; ok {
+			return v
+		}
+		return os.Getenv(key)
+	}
+	expanded := make([]string, len(s.Args))
+	for i, arg := range s.Args {
+		expanded[i] = os.Expand(arg, lookup)
+	}
+	return config.StringOrSlice{Args: expanded, Shell: s.Shell}
+}
+
+// absVolumes resolves relative host paths in volume mappings to absolute paths
+// and pre-creates the host directory if it doesn't exist.
+// Docker requires absolute host paths; Docker Desktop won't auto-create missing dirs.
+// Named volumes (e.g. "pgdata:/var/lib/...") are passed through unchanged.
+func absVolumes(raw []string) ([]string, error) {
+	out := make([]string, len(raw))
+	for i, v := range raw {
+		host, rest, ok := strings.Cut(v, ":")
+		if ok && (strings.HasPrefix(host, "/") || strings.HasPrefix(host, ".")) {
+			// Bind mount: resolve to absolute and pre-create directory if needed.
+			if !filepath.IsAbs(host) {
+				if abs, err := filepath.Abs(host); err == nil {
+					host = abs
+				}
+			}
+			// Skip MkdirAll if the path already exists as a file (file bind-mount).
+			if info, statErr := os.Lstat(host); os.IsNotExist(statErr) || (statErr == nil && info.IsDir()) {
+				if err := os.MkdirAll(host, 0o755); err != nil {
+					return nil, fmt.Errorf("creating volume directory %q: %w", host, err)
+				}
+			}
+			out[i] = host + ":" + rest
+		} else {
+			out[i] = v
+		}
+	}
+	return out, nil
 }
 
 func parsePorts(raw []string) ([]PortMapping, error) {

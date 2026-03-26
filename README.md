@@ -106,6 +106,26 @@ services:
       - .env
     env:
       POSTGRES_DB: myproject
+    health:
+      command: "pg_isready -U myproject"  # exec-based check (no HTTP endpoint)
+      interval: 2s
+      retries: 10
+```
+
+Containers in the same lokl project share a bridge network (`lokl-{name}`).
+They can reach each other by service name — no need to expose ports between containers:
+
+```yaml
+services:
+  api:
+    image: myapp:latest
+    env:
+      DB_HOST: db        # reaches the "db" container directly
+      REDIS_HOST: cache  # reaches the "cache" container directly
+  db:
+    image: postgres:16
+  cache:
+    image: redis:7
 ```
 
 Then:
