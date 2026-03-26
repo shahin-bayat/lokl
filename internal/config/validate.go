@@ -225,6 +225,10 @@ func validateHealth(svcName string, h *HealthConfig) error {
 		return fmt.Errorf("service %q: health.path and health.command are mutually exclusive", svcName)
 	}
 
+	if h.Command.IsSet() && strings.TrimSpace(h.Command.Args[0]) == "" {
+		return fmt.Errorf("service %q: health.command must not be empty", svcName)
+	}
+
 	if h.Interval != "" {
 		if _, err := time.ParseDuration(h.Interval); err != nil {
 			return fmt.Errorf("service %q: invalid health.interval %q: %w", svcName, h.Interval, err)

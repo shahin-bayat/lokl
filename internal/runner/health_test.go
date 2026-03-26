@@ -81,7 +81,7 @@ func TestRunProbeSucceeds(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	RunProbe(ctx, probe, 10*time.Millisecond, 100*time.Millisecond, 5, func(healthy bool) {
+	RunProbe(ctx, probe, 10*time.Millisecond, 5, func(healthy bool) {
 		gotHealthy = healthy
 		cancel()
 	})
@@ -101,7 +101,7 @@ func TestRunProbeNeverHealthyOnAlwaysFailing(t *testing.T) {
 	defer cancel()
 
 	called := false
-	RunProbe(ctx, probe, 10*time.Millisecond, 100*time.Millisecond, 3, func(healthy bool) {
+	RunProbe(ctx, probe, 10*time.Millisecond, 3, func(healthy bool) {
 		called = true
 	})
 
@@ -120,7 +120,7 @@ func TestRunProbeCancellation(t *testing.T) {
 	RunProbe(ctx, func() bool {
 		probeCount++
 		return false // never healthy
-	}, 20*time.Millisecond, 100*time.Millisecond, 3, func(bool) {
+	}, 20*time.Millisecond, 3, func(bool) {
 		// no callbacks expected (never transitions if always unhealthy)
 	})
 

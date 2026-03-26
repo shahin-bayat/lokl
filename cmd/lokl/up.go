@@ -62,8 +62,11 @@ func runUp(cmd *cobra.Command, args []string) error {
 			defer func() { _ = dockerClient.Close() }()
 
 			projectNetwork = "lokl-" + cfg.Name
-			if err := dockerClient.EnsureProjectNetwork(context.Background(), projectNetwork); err != nil {
-				return fmt.Errorf("creating project network: %w", err)
+			netCtx, netCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			netErr := dockerClient.EnsureProjectNetwork(netCtx, projectNetwork)
+			netCancel()
+			if netErr != nil {
+				return fmt.Errorf("creating project network: %w", netErr)
 			}
 			break // load-bearing: single call guaranteed; idempotency handles crash recovery
 		}

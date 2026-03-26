@@ -393,6 +393,62 @@ func TestStringOrSliceIsSet(t *testing.T) {
 	}
 }
 
+func TestValidateHealthEmptyCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name: "empty string command",
+			input: `
+name: test
+services:
+  db:
+    image: postgres:16
+    health:
+      command: ""
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty array element",
+			input: `
+name: test
+services:
+  db:
+    image: postgres:16
+    health:
+      command: [""]
+`,
+			wantErr: true,
+		},
+		{
+			name: "valid command",
+			input: `
+name: test
+services:
+  db:
+    image: postgres:16
+    health:
+      command: "pg_isready"
+`,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadBytes([]byte(tt.input))
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateHealthMutualExclusion(t *testing.T) {
 	input := `
 name: test

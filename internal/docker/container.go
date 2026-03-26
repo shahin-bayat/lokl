@@ -162,7 +162,7 @@ func (c *Container) Start() error {
 				c.logf("health exec: code=%d err=%v", code, err)
 			}
 			return err == nil && code == 0
-		}, interval, timeout, retries, func(healthy bool) {
+		}, interval, retries, func(healthy bool) {
 			c.mu.Lock()
 			c.healthy = healthy
 			c.mu.Unlock()
@@ -319,14 +319,17 @@ func absVolumes(raw []string) ([]string, error) {
 	for i, v := range raw {
 		host, rest, ok := strings.Cut(v, ":")
 		if ok && (strings.HasPrefix(host, "/") || strings.HasPrefix(host, ".")) {
-			// Bind mount: resolve to absolute and pre-create.
+			// Bind mount: resolve to absolute and pre-create directory if needed.
 			if !filepath.IsAbs(host) {
 				if abs, err := filepath.Abs(host); err == nil {
 					host = abs
 				}
 			}
-			if err := os.MkdirAll(host, 0o755); err != nil {
-				return nil, fmt.Errorf("creating volume directory %q: %w", host, err)
+			// Skip MkdirAll if the path already exists as a file (file bind-mount).
+			if info, statErr := os.Lstat(host); os.IsNotExist(statErr) || (statErr == nil && info.IsDir()) {
+				if err := os.MkdirAll(host, 0o755); err != nil {
+					return nil, fmt.Errorf("creating volume directory %q: %w", host, err)
+				}
 			}
 			out[i] = host + ":" + rest
 		} else {
