@@ -19,6 +19,7 @@ import (
 	"github.com/shahin-bayat/lokl/internal/supervisor"
 	"github.com/shahin-bayat/lokl/internal/tui"
 	"github.com/shahin-bayat/lokl/internal/types"
+	"github.com/shahin-bayat/lokl/internal/update"
 )
 
 var detach bool
@@ -38,6 +39,11 @@ func runUp(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	updateCh := make(chan string, 1)
+	go func() {
+		updateCh <- update.Check(buildVersion)
+	}()
 
 	if entry, err := lockfile.Read(cfg.Name); err == nil {
 		if !lockfile.IsStale(entry) {
@@ -116,7 +122,17 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return sup.Stop()
+	result := sup.Stop()
+
+	select {
+	case v := <-updateCh:
+		if v != "" {
+			fmt.Fprintf(os.Stderr, "\nlokl %s is available (you have %s). Run: brew upgrade lokl\n", v, buildVersion)
+		}
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	return result
 }
 
 func buildLockEntry(project string, runners map[string]supervisor.ProcessRunner) *lockfile.Entry {
