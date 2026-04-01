@@ -35,15 +35,15 @@ func init() {
 }
 
 func runUp(cmd *cobra.Command, args []string) error {
-	updateCh := make(chan string, 1)
-	go func() {
-		updateCh <- update.Check(buildVersion)
-	}()
-
 	cfg, err := config.Load(configFile)
 	if err != nil {
 		return err
 	}
+
+	updateCh := make(chan string, 1)
+	go func() {
+		updateCh <- update.Check(buildVersion)
+	}()
 
 	if entry, err := lockfile.Read(cfg.Name); err == nil {
 		if !lockfile.IsStale(entry) {

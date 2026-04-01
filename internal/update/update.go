@@ -90,14 +90,30 @@ func writeCache(c *cache) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	data, err := json.Marshal(c)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	// Write atomically via temp file + rename to avoid corrupt reads.
+	tmp, err := os.CreateTemp(dir, "version-check-*.json.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func cachePath() (string, error) {
@@ -136,22 +152,31 @@ func fetchLatest() (string, error) {
 }
 
 // isNewer returns true if latest is strictly greater than current.
-// Both strings may have a leading "v".
+// Both strings may have a leading "v". Missing trailing segments are treated
+// as 0, so v1.2 == v1.2.0 and v1.2.1 > v1.2.
 func isNewer(current, latest string) bool {
 	cv := parseVersion(current)
 	lv := parseVersion(latest)
-	for i := range cv {
-		if i >= len(lv) {
-			return false
+	n := len(cv)
+	if len(lv) > n {
+		n = len(lv)
+	}
+	for i := range n {
+		c, l := 0, 0
+		if i < len(cv) {
+			c = cv[i]
 		}
-		if lv[i] > cv[i] {
+		if i < len(lv) {
+			l = lv[i]
+		}
+		if l > c {
 			return true
 		}
-		if lv[i] < cv[i] {
+		if l < c {
 			return false
 		}
 	}
-	return len(lv) > len(cv)
+	return false
 }
 
 func parseVersion(v string) []int {

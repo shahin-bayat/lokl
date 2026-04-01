@@ -20,6 +20,9 @@ func TestIsNewer(t *testing.T) {
 		{"v0.9.9", "v1.0.0", true},
 		{"v1.0.0", "v0.9.9", false},
 		{"v1.0.0", "v1.0.0", false},
+		{"v1.2", "v1.2.0", false}, // trailing zero not newer
+		{"v1.2.0", "v1.2", false}, // shorter not newer
+		{"v1.2", "v1.2.1", true},  // trailing non-zero is newer
 	}
 	for _, tc := range tests {
 		got := isNewer(tc.current, tc.latest)
@@ -186,6 +189,7 @@ func TestLatestVersionFetchFailureCached(t *testing.T) {
 	apiURL = ts.URL
 	defer func() { apiURL = origURL }()
 
+	start := time.Now()
 	got := latestVersion()
 	if got != "" {
 		t.Errorf("expected empty on fetch failure, got %q", got)
@@ -199,7 +203,7 @@ func TestLatestVersionFetchFailureCached(t *testing.T) {
 	if c.LatestVersion != "" {
 		t.Errorf("expected empty cached version after failure, got %q", c.LatestVersion)
 	}
-	if time.Since(c.CheckedAt) > time.Second {
-		t.Error("expected CheckedAt to be recent after caching failure")
+	if c.CheckedAt.Before(start) {
+		t.Errorf("expected CheckedAt >= %v, got %v", start, c.CheckedAt)
 	}
 }
