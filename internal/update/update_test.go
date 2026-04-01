@@ -1,6 +1,9 @@
 package update
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -55,9 +58,15 @@ func TestShouldSkip_Normal(t *testing.T) {
 	}
 }
 
-func TestReadWriteCache(t *testing.T) {
+func sandboxCache(t *testing.T) {
+	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CACHE_HOME", tmp) // Linux: os.UserCacheDir() checks this first
+}
+
+func TestReadWriteCache(t *testing.T) {
+	sandboxCache(t)
 
 	c := &cache{
 		LatestVersion: "v0.5.0",
@@ -80,8 +89,7 @@ func TestReadWriteCache(t *testing.T) {
 }
 
 func TestCacheStale(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	sandboxCache(t)
 
 	c := &cache{
 		LatestVersion: "v0.5.0",
@@ -101,8 +109,7 @@ func TestCacheStale(t *testing.T) {
 }
 
 func TestCacheFresh(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	sandboxCache(t)
 
 	c := &cache{
 		LatestVersion: "v0.5.0",
@@ -118,5 +125,81 @@ func TestCacheFresh(t *testing.T) {
 	}
 	if time.Since(got.CheckedAt) >= cacheTTL {
 		t.Error("expected cache to be fresh (< 24h old)")
+	}
+}
+
+func TestLatestVersionCacheHit(t *testing.T) {
+	sandboxCache(t)
+
+	// Write a fresh cache — latestVersion should return it without any HTTP call.
+	_ = writeCache(&cache{LatestVersion: "v0.9.0", CheckedAt: time.Now().UTC()})
+
+	origURL := apiURL
+	apiURL = "http://127.0.0.1:0/should-not-be-called"
+	defer func() { apiURL = origURL }()
+
+	if got := latestVersion(); got != "v0.9.0" {
+		t.Errorf("latestVersion() = %q, want cache hit %q", got, "v0.9.0")
+	}
+}
+
+func TestLatestVersionFetch(t *testing.T) {
+	sandboxCache(t)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("User-Agent") == "" {
+			t.Error("missing User-Agent header")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"tag_name":"v0.9.0"}`)
+	}))
+	defer ts.Close()
+
+	origURL := apiURL
+	apiURL = ts.URL
+	defer func() { apiURL = origURL }()
+
+	if got := latestVersion(); got != "v0.9.0" {
+		t.Errorf("latestVersion() = %q, want %q", got, "v0.9.0")
+	}
+
+	// Cache should be written.
+	c, err := readCache()
+	if err != nil {
+		t.Fatalf("readCache: %v", err)
+	}
+	if c.LatestVersion != "v0.9.0" {
+		t.Errorf("cached version = %q, want %q", c.LatestVersion, "v0.9.0")
+	}
+}
+
+func TestLatestVersionFetchFailureCached(t *testing.T) {
+	sandboxCache(t)
+
+	// Server that always fails.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer ts.Close()
+
+	origURL := apiURL
+	apiURL = ts.URL
+	defer func() { apiURL = origURL }()
+
+	got := latestVersion()
+	if got != "" {
+		t.Errorf("expected empty on fetch failure, got %q", got)
+	}
+
+	// Failure should be cached so next call skips HTTP entirely.
+	c, err := readCache()
+	if err != nil {
+		t.Fatalf("readCache after failure: %v", err)
+	}
+	if c.LatestVersion != "" {
+		t.Errorf("expected empty cached version after failure, got %q", c.LatestVersion)
+	}
+	if time.Since(c.CheckedAt) > time.Second {
+		t.Error("expected CheckedAt to be recent after caching failure")
 	}
 }

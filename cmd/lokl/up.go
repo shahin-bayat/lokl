@@ -122,11 +122,17 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if v := <-updateCh; v != "" {
-		fmt.Fprintf(os.Stderr, "\nlokl %s is available (you have %s). Run: brew upgrade lokl\n", v, buildVersion)
+	result := sup.Stop()
+
+	select {
+	case v := <-updateCh:
+		if v != "" {
+			fmt.Fprintf(os.Stderr, "\nlokl %s is available (you have %s). Run: brew upgrade lokl\n", v, buildVersion)
+		}
+	case <-time.After(100 * time.Millisecond):
 	}
 
-	return sup.Stop()
+	return result
 }
 
 func buildLockEntry(project string, runners map[string]supervisor.ProcessRunner) *lockfile.Entry {

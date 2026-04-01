@@ -13,9 +13,11 @@ import (
 
 const (
 	cacheTTL    = 24 * time.Hour
-	apiURL      = "https://api.github.com/repos/shahin-bayat/lokl/releases/latest"
 	httpTimeout = 5 * time.Second
 )
+
+// apiURL is a var so tests can point it at a local httptest server.
+var apiURL = "https://api.github.com/repos/shahin-bayat/lokl/releases/latest"
 
 var httpClient = &http.Client{Timeout: httpTimeout}
 
@@ -60,11 +62,9 @@ func latestVersion() string {
 		return c.LatestVersion
 	}
 
-	latest, err := fetchLatest()
-	if err != nil {
-		return ""
-	}
-
+	latest, _ := fetchLatest()
+	// Cache even on failure (empty LatestVersion) so transient errors and
+	// rate-limit responses are throttled by cacheTTL, not retried every run.
 	_ = writeCache(&cache{LatestVersion: latest, CheckedAt: time.Now().UTC()})
 	return latest
 }
@@ -109,7 +109,14 @@ func cachePath() (string, error) {
 }
 
 func fetchLatest() (string, error) {
-	resp, err := httpClient.Get(apiURL)
+	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "lokl-cli")
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
