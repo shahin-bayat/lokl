@@ -1,7 +1,6 @@
 package update
 
 import (
-	"os"
 	"testing"
 	"time"
 )
@@ -49,8 +48,8 @@ func TestShouldSkip_OptOut(t *testing.T) {
 
 func TestShouldSkip_Normal(t *testing.T) {
 	// Ensure env vars are unset.
-	os.Unsetenv("CI")
-	os.Unsetenv("LOKL_NO_UPDATE_CHECK")
+	t.Setenv("CI", "")
+	t.Setenv("LOKL_NO_UPDATE_CHECK", "")
 	if shouldSkip("v0.2.0") {
 		t.Error("expected no skip for normal build")
 	}
