@@ -15,7 +15,10 @@ func sanitizeLog(s string) string {
 	s = ansi.Strip(s)
 	var b strings.Builder
 	for _, r := range s {
-		if r == '\t' || !unicode.IsControl(r) {
+		switch {
+		case r == '\t':
+			b.WriteString("    ")
+		case !unicode.IsControl(r):
 			b.WriteRune(r)
 		}
 	}

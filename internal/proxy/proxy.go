@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -60,25 +61,32 @@ func (p *Proxy) Setup() error {
 }
 
 func (p *Proxy) Start() error {
-	domain := p.router.domain()
-	certPath := p.certs.certPath(domain)
-	keyPath := p.certs.keyPath(domain)
-
-	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", p.port))
 	if err != nil {
+		return fmt.Errorf("binding port %d: %w", p.port, err)
+	}
+
+	domain := p.router.domain()
+	cert, err := tls.LoadX509KeyPair(p.certs.certPath(domain), p.certs.keyPath(domain))
+	if err != nil {
+		_ = ln.Close()
 		return fmt.Errorf("loading certificate: %w", err)
 	}
 
+	tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}}
 	p.server = &http.Server{
-		Addr:     fmt.Sprintf("0.0.0.0:%d", p.port),
-		Handler:  p.handler,
-		ErrorLog: log.New(io.Discard, "", 0),
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		},
+		Handler:   p.handler,
+		ErrorLog:  log.New(io.Discard, "", 0),
+		TLSConfig: tlsCfg,
 	}
 
-	return p.server.ListenAndServeTLS("", "")
+	go func() {
+		if err := p.server.ServeTLS(ln, "", ""); err != nil && err != http.ErrServerClosed {
+			log.Printf("proxy server error: %v", err)
+		}
+	}()
+
+	return nil
 }
 
 func (p *Proxy) Stop(cleanupDNS bool) error {
