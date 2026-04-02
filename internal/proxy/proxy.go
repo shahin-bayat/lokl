@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -69,16 +70,23 @@ func (p *Proxy) Start() error {
 		return fmt.Errorf("loading certificate: %w", err)
 	}
 
-	p.server = &http.Server{
-		Addr:     fmt.Sprintf("0.0.0.0:%d", p.port),
-		Handler:  p.handler,
-		ErrorLog: log.New(io.Discard, "", 0),
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		},
+	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", p.port))
+	if err != nil {
+		return fmt.Errorf("binding port %d: %w", p.port, err)
 	}
 
-	return p.server.ListenAndServeTLS("", "")
+	tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}}
+	p.server = &http.Server{
+		Handler:   p.handler,
+		ErrorLog:  log.New(io.Discard, "", 0),
+		TLSConfig: tlsCfg,
+	}
+
+	go func() {
+		_ = p.server.ServeTLS(ln, "", "")
+	}()
+
+	return nil
 }
 
 func (p *Proxy) Stop(cleanupDNS bool) error {

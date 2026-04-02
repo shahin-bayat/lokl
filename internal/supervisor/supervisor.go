@@ -2,9 +2,7 @@
 package supervisor
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 
@@ -276,11 +274,9 @@ func (s *Supervisor) setupProxy() error {
 }
 
 func (s *Supervisor) startProxy() error {
-	go func() {
-		if err := s.proxyManager.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.emit(types.Event{Type: types.EventError, Message: fmt.Sprintf("proxy: %v", err)})
-		}
-	}()
+	if err := s.proxyManager.Start(); err != nil {
+		return fmt.Errorf("proxy: %w", err)
+	}
 
 	s.emit(types.Event{Type: types.EventProgress, Message: fmt.Sprintf("proxy listening on :%d", s.proxyManager.Port())})
 	return nil
