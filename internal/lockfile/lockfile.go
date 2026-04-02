@@ -88,11 +88,12 @@ func Kill(e *Entry) {
 	}
 	signalProcesses(e, syscall.SIGTERM)
 
-	time.Sleep(killGracePeriod)
-
-	signalProcesses(e, syscall.SIGKILL)
-	if e.PID > 0 {
-		_ = syscall.Kill(e.PID, syscall.SIGKILL)
+	if e.PID > 0 || len(e.Processes) > 0 {
+		time.Sleep(killGracePeriod)
+		signalProcesses(e, syscall.SIGKILL)
+		if e.PID > 0 {
+			_ = syscall.Kill(e.PID, syscall.SIGKILL)
+		}
 	}
 
 	stopContainers(e)
