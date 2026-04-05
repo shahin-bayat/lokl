@@ -162,16 +162,30 @@ func (m Model) renderLogs(available int) string {
 		return ""
 	}
 
-	start := 0
-	if len(logs) > maxLogLines {
-		start = len(logs) - maxLogLines
+	// cap offset so scrolling to the top always shows a full screenful
+	maxOffset := len(logs) - maxLogLines
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	offset := m.logOffset
+	if offset > maxOffset {
+		offset = maxOffset
+	}
+
+	end := len(logs) - offset
+	if end < 0 {
+		end = 0
+	}
+	start := end - maxLogLines
+	if start < 0 {
+		start = 0
 	}
 
 	logWidth := m.width - 2
 
 	var b strings.Builder
 	b.WriteString(headerStr)
-	for _, line := range logs[start:] {
+	for _, line := range logs[start:end] {
 		line = sanitizeLog(line)
 		b.WriteString("  ")
 		b.WriteString(ansi.Truncate(line, logWidth, ""))
@@ -182,15 +196,25 @@ func (m Model) renderLogs(available int) string {
 }
 
 func (m Model) renderStatusBar() string {
-	keys := []string{
-		styleKeyHint.Render("j/k") + " navigate",
-		styleKeyHint.Render("s") + " start",
-		styleKeyHint.Render("x") + " stop",
-		styleKeyHint.Render("r") + " restart",
-		styleKeyHint.Render("p") + " toggle",
-		styleKeyHint.Render("l") + " logs",
-		styleKeyHint.Render("?") + " help",
-		styleKeyHint.Render("q") + " quit",
+	var keys []string
+	if m.showLogs {
+		keys = []string{
+			styleKeyHint.Render("k") + " scroll up",
+			styleKeyHint.Render("j") + " scroll down",
+			styleKeyHint.Render("l/esc") + " close logs",
+			styleKeyHint.Render("q") + " quit",
+		}
+	} else {
+		keys = []string{
+			styleKeyHint.Render("j/k") + " navigate",
+			styleKeyHint.Render("s") + " start",
+			styleKeyHint.Render("x") + " stop",
+			styleKeyHint.Render("r") + " restart",
+			styleKeyHint.Render("p") + " toggle",
+			styleKeyHint.Render("l") + " logs",
+			styleKeyHint.Render("?") + " help",
+			styleKeyHint.Render("q") + " quit",
+		}
 	}
 
 	return styleStatusBar.Render(strings.Join(keys, "  "))

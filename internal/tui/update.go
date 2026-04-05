@@ -70,13 +70,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "j", "down":
-		if m.selectedIdx < len(m.services)-1 {
-			m.selectedIdx++
+		if m.showLogs {
+			if m.logOffset > 0 {
+				m.logOffset--
+			}
+		} else {
+			if m.selectedIdx < len(m.services)-1 {
+				m.selectedIdx++
+				m.logOffset = 0
+			}
 		}
 
 	case "k", "up":
-		if m.selectedIdx > 0 {
-			m.selectedIdx--
+		if m.showLogs {
+			m.logOffset++
+		} else {
+			if m.selectedIdx > 0 {
+				m.selectedIdx--
+				m.logOffset = 0
+			}
 		}
 
 	case "s":
@@ -102,8 +114,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "l":
 		m.showLogs = !m.showLogs
+		m.logOffset = 0
 		if m.showLogs {
 			return m, logTick()
+		}
+
+	case "esc":
+		if m.showLogs {
+			m.showLogs = false
+			m.logOffset = 0
 		}
 	}
 
