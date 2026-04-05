@@ -83,14 +83,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "k", "up":
 		if m.showLogs {
-			svc := m.selectedService()
-			if svc != nil {
-				logs := m.controller.ServiceLogs(svc.Name)
-				m.logOffset++
-				if m.logOffset > len(logs) {
-					m.logOffset = len(logs)
-				}
-			}
+			m.logOffset++
 		} else {
 			if m.selectedIdx > 0 {
 				m.selectedIdx--

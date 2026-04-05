@@ -162,7 +162,17 @@ func (m Model) renderLogs(available int) string {
 		return ""
 	}
 
-	end := len(logs) - m.logOffset
+	// cap offset so scrolling to the top always shows a full screenful
+	maxOffset := len(logs) - maxLogLines
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	offset := m.logOffset
+	if offset > maxOffset {
+		offset = maxOffset
+	}
+
+	end := len(logs) - offset
 	if end < 0 {
 		end = 0
 	}
