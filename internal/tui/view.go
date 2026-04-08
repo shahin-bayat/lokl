@@ -123,7 +123,8 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool, nameWidth 
 		if svc.ProxyEnabled {
 			domain = "  " + styleLink.Render(paddedURL)
 		} else {
-			domain = styleProxyOff.Render("⊘") + " " + styleDomain.Render(paddedURL)
+			localURL := fmt.Sprintf("%-30s", fmt.Sprintf("http://localhost:%d", svc.Port))
+			domain = "  " + styleDomain.Render(localURL)
 		}
 	}
 
@@ -142,15 +143,12 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool, nameWidth 
 	}
 	status = statusStyle.Render(status)
 
-	row := fmt.Sprintf("%s%s %s %s  %s  %s", cursor, indicator, name, domain, port, status)
+	body := fmt.Sprintf("%s %s %s  %s  %s", indicator, name, domain, port, status)
 
-	if selected {
-		return styleSelected.Render(row)
+	if svc.Running && !svc.Healthy && !selected {
+		return cursor + lipgloss.NewStyle().Background(lipgloss.Color("#3D1E1E")).Render(body)
 	}
-	if svc.Running && !svc.Healthy {
-		return lipgloss.NewStyle().Background(lipgloss.Color("#3D1E1E")).Render(row)
-	}
-	return row
+	return cursor + body
 }
 
 func (m Model) renderLogs(available int) string {
