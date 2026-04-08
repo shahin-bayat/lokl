@@ -88,10 +88,16 @@ func (m Model) renderServices() string {
 		return styleStopped.Render("  No services configured")
 	}
 
-	var b strings.Builder
+	nameWidth := 16
+	for _, svc := range m.services {
+		if len(svc.Name) > nameWidth {
+			nameWidth = len(svc.Name)
+		}
+	}
 
+	var b strings.Builder
 	for i, svc := range m.services {
-		line := m.renderServiceRow(svc, i == m.selectedIdx, 16)
+		line := m.renderServiceRow(svc, i == m.selectedIdx, nameWidth)
 		b.WriteString(line)
 		b.WriteString("\n")
 	}

@@ -136,3 +136,28 @@ func TestStatusBarHasDivider(t *testing.T) {
 		t.Error("status bar should contain a ─ divider line")
 	}
 }
+
+func TestNameColumnAdaptsToLongestName(t *testing.T) {
+	svcs := []types.ServiceInfo{
+		{Name: "short", Running: true, Healthy: true},
+		{Name: "a-very-long-service-name", Running: false},
+	}
+	m := newTestModel(svcs)
+	m.width = 120
+
+	rendered := m.renderServices()
+	stripped := ansi.Strip(rendered)
+
+	if !strings.Contains(stripped, "a-very-long-service-name") {
+		t.Error("long service name should appear untruncated in service list")
+	}
+	if !strings.Contains(stripped, "short") {
+		t.Error("short service name should appear in service list")
+	}
+
+	// Verify both rows are present
+	lines := strings.Split(strings.TrimRight(stripped, "\n"), "\n")
+	if len(lines) < 2 {
+		t.Errorf("expected at least 2 service rows, got %d", len(lines))
+	}
+}
