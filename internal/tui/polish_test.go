@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shahin-bayat/lokl/internal/types"
 )
@@ -98,5 +99,40 @@ func TestHeaderZeroRunningUsesStopped(t *testing.T) {
 	header := m.renderHeader()
 	if !strings.Contains(header, styleStopped.Render("0 running")) {
 		t.Errorf("header should contain styleStopped-rendered count when nothing running")
+	}
+}
+
+func TestLogSeparatorFillsWidth(t *testing.T) {
+	svc := types.ServiceInfo{Name: "api", Running: true, Healthy: true, Port: 3000}
+	m := newTestModel([]types.ServiceInfo{svc})
+	m.selectedIdx = 0
+	m.width = 80
+
+	output := m.renderLogs(20)
+	stripped := ansi.Strip(output)
+	lines := strings.Split(stripped, "\n")
+	var sepLine string
+	for _, l := range lines {
+		if strings.Contains(l, "─── Logs:") {
+			sepLine = l
+			break
+		}
+	}
+	if sepLine == "" {
+		t.Fatal("separator line not found in renderLogs output")
+	}
+	got := len([]rune(sepLine))
+	if got < m.width-2 || got > m.width {
+		t.Errorf("separator length %d not within [%d, %d]", got, m.width-2, m.width)
+	}
+}
+
+func TestStatusBarHasDivider(t *testing.T) {
+	m := newTestModel([]types.ServiceInfo{})
+	m.width = 80
+	bar := m.renderStatusBar()
+	stripped := ansi.Strip(bar)
+	if !strings.Contains(stripped, "─") {
+		t.Error("status bar should contain a ─ divider line")
 	}
 }

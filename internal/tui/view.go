@@ -153,10 +153,9 @@ func (m Model) renderLogs(available int) string {
 		return ""
 	}
 
-	headerStr := "\n" +
-		styleDomain.Render(fmt.Sprintf("─── Logs: %s ", svc.Name)) +
-		styleDomain.Render(strings.Repeat("─", 40)) +
-		"\n\n"
+	prefix := fmt.Sprintf("─── Logs: %s ", svc.Name)
+	fill := max(0, m.width-lipgloss.Width(prefix))
+	headerStr := "\n" + styleDomain.Render(prefix+strings.Repeat("─", fill)) + "\n\n"
 
 	logs := m.controller.ServiceLogs(svc.Name)
 	if len(logs) == 0 {
@@ -202,6 +201,8 @@ func (m Model) renderLogs(available int) string {
 }
 
 func (m Model) renderStatusBar() string {
+	divider := styleDomain.Render(strings.Repeat("─", m.width))
+
 	var keys []string
 	if m.showLogs {
 		keys = []string{
@@ -223,7 +224,7 @@ func (m Model) renderStatusBar() string {
 		}
 	}
 
-	return styleStatusBar.Render(strings.Join(keys, "  "))
+	return divider + "\n" + styleStatusBar.Render(strings.Join(keys, "  "))
 }
 
 func (m Model) renderHelp() string {
