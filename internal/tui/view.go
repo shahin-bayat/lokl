@@ -69,7 +69,11 @@ func (m Model) renderHeader() string {
 	}
 
 	left := styleHeader.Render(name)
-	right := fmt.Sprintf("%s %d running", stateIndicator(runningCount > 0, true), runningCount)
+	countStyle := styleStopped
+	if runningCount > 0 {
+		countStyle = styleRunning
+	}
+	right := fmt.Sprintf("%s %s", stateIndicator(runningCount > 0, true), countStyle.Render(fmt.Sprintf("%d running", runningCount)))
 
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 0 {
@@ -98,7 +102,7 @@ func (m Model) renderServices() string {
 func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool, nameWidth int) string {
 	cursor := "  "
 	if selected {
-		cursor = styleKeyHint.Render("▸ ")
+		cursor = styleKeyHint.Render("❯ ")
 	}
 
 	indicator := stateIndicator(svc.Running, svc.Healthy)
@@ -113,7 +117,7 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool, nameWidth 
 		if svc.ProxyEnabled {
 			domain = "  " + styleLink.Render(paddedURL)
 		} else {
-			domain = styleProxyOff.Render("↗") + " " + styleDomain.Render(paddedURL)
+			domain = styleProxyOff.Render("⊘") + " " + styleDomain.Render(paddedURL)
 		}
 	}
 

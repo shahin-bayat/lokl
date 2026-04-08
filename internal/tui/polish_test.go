@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -65,5 +66,37 @@ func TestUnhealthyRowSelectedNoTint(t *testing.T) {
 	unselectedRow := m.renderServiceRow(svc, false, 16)
 	if selectedRow == unselectedRow {
 		t.Error("selected and unselected rows should differ")
+	}
+}
+
+func TestHeaderRunningCountStyled(t *testing.T) {
+	svc := types.ServiceInfo{Name: "api", Running: true, Healthy: true}
+	m := newTestModel([]types.ServiceInfo{svc})
+	m.width = 120
+
+	expectedColor := styleRunning.GetForeground()
+	if expectedColor == (lipgloss.Color("")) {
+		t.Skip("lipgloss has no color in test environment — verify manually")
+	}
+
+	header := m.renderHeader()
+	if !strings.Contains(header, styleRunning.Render("1 running")) {
+		t.Errorf("header should contain styleRunning-rendered count")
+	}
+}
+
+func TestHeaderZeroRunningUsesStopped(t *testing.T) {
+	svc := types.ServiceInfo{Name: "api", Running: false, Healthy: false}
+	m := newTestModel([]types.ServiceInfo{svc})
+	m.width = 120
+
+	expectedColor := styleStopped.GetForeground()
+	if expectedColor == (lipgloss.Color("")) {
+		t.Skip("lipgloss has no color in test environment — verify manually")
+	}
+
+	header := m.renderHeader()
+	if !strings.Contains(header, styleStopped.Render("0 running")) {
+		t.Errorf("header should contain styleStopped-rendered count when nothing running")
 	}
 }
