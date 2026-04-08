@@ -195,9 +195,17 @@ func (m Model) renderLogs(available int) string {
 	var b strings.Builder
 	b.WriteString(headerStr)
 	for _, line := range logs[start:end] {
-		line = sanitizeLog(line)
+		runes := []rune(sanitizeLog(line))
+		hStart := m.logHOffset
+		if hStart > len(runes) {
+			hStart = len(runes)
+		}
+		hEnd := hStart + logWidth
+		if hEnd > len(runes) {
+			hEnd = len(runes)
+		}
 		b.WriteString("  ")
-		b.WriteString(ansi.Truncate(line, logWidth, ""))
+		b.WriteString(string(runes[hStart:hEnd]))
 		b.WriteString("\n")
 	}
 
@@ -210,9 +218,9 @@ func (m Model) renderStatusBar() string {
 	var keys []string
 	if m.showLogs {
 		keys = []string{
-			styleKeyHint.Render("k") + " scroll up",
-			styleKeyHint.Render("j") + " scroll down",
-			styleKeyHint.Render("l/esc") + " close logs",
+			styleKeyHint.Render("k/j/↑/↓") + " scroll",
+			styleKeyHint.Render("h/l/←/→") + " pan",
+			styleKeyHint.Render("esc") + " close",
 			styleKeyHint.Render("q") + " quit",
 		}
 	} else {
@@ -244,7 +252,10 @@ func (m Model) renderHelp() string {
 		{"x", "Stop selected service"},
 		{"r", "Restart selected service"},
 		{"p", "Toggle proxy (local/remote)"},
-		{"l", "Toggle log view"},
+		{"l", "Open log view"},
+		{"k/j", "Scroll logs up/down (↑/↓)"},
+		{"h/l", "Pan logs left/right (←/→)"},
+		{"esc", "Close log view"},
 		{"?", "Show/hide this help"},
 		{"q", "Quit lokl"},
 	}
