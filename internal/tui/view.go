@@ -87,7 +87,7 @@ func (m Model) renderServices() string {
 	var b strings.Builder
 
 	for i, svc := range m.services {
-		line := m.renderServiceRow(svc, i == m.selectedIdx)
+		line := m.renderServiceRow(svc, i == m.selectedIdx, 16)
 		b.WriteString(line)
 		b.WriteString("\n")
 	}
@@ -95,14 +95,14 @@ func (m Model) renderServices() string {
 	return b.String()
 }
 
-func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
+func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool, nameWidth int) string {
 	cursor := "  "
 	if selected {
 		cursor = styleKeyHint.Render("▸ ")
 	}
 
 	indicator := stateIndicator(svc.Running, svc.Healthy)
-	name := fmt.Sprintf("%-16s", svc.Name)
+	name := fmt.Sprintf("%-*s", nameWidth, svc.Name)
 
 	var domain string
 	if svc.Domain == "" {
@@ -113,7 +113,7 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
 		if svc.ProxyEnabled {
 			domain = "  " + styleLink.Render(paddedURL)
 		} else {
-			domain = styleFailed.Render("↗") + " " + styleDomain.Render(paddedURL)
+			domain = styleProxyOff.Render("↗") + " " + styleDomain.Render(paddedURL)
 		}
 	}
 
@@ -135,9 +135,11 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
 	row := fmt.Sprintf("%s%s %s %s  %s  %s", cursor, indicator, name, domain, port, status)
 
 	if selected {
-		row = styleSelected.Render(row)
+		return styleSelected.Render(row)
 	}
-
+	if svc.Running && !svc.Healthy {
+		return lipgloss.NewStyle().Background(lipgloss.Color("#3D1E1E")).Render(row)
+	}
 	return row
 }
 

@@ -8,14 +8,16 @@ var (
 	colorError     = lipgloss.Color("#FF4757")
 	colorMuted     = lipgloss.Color("#626262")
 	colorHighlight = lipgloss.Color("#3D3D5C")
+	colorAmber     = lipgloss.Color("#F4A227")
 
 	styleHeader = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(colorPrimary)
 
-	styleRunning = lipgloss.NewStyle().Foreground(colorSuccess)
-	styleStopped = lipgloss.NewStyle().Foreground(colorMuted)
-	styleFailed  = lipgloss.NewStyle().Foreground(colorError)
+	styleRunning  = lipgloss.NewStyle().Foreground(colorSuccess)
+	styleStopped  = lipgloss.NewStyle().Foreground(colorMuted)
+	styleFailed   = lipgloss.NewStyle().Foreground(colorError)
+	styleProxyOff = lipgloss.NewStyle().Foreground(colorAmber)
 
 	styleSelected = lipgloss.NewStyle().
 			Background(colorHighlight).
@@ -32,7 +34,7 @@ var (
 			Foreground(colorMuted)
 
 	styleLink = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00BFFF")).
+			Foreground(lipgloss.Color("#A78BFA")).
 			Bold(true)
 )
 
