@@ -7,16 +7,14 @@ var (
 	colorSuccess = lipgloss.Color("#73D216")
 	colorError   = lipgloss.Color("#FF4757")
 	colorMuted   = lipgloss.Color("#626262")
-	colorAmber   = lipgloss.Color("#F4A227")
 
 	styleHeader = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(colorPrimary)
 
-	styleRunning  = lipgloss.NewStyle().Foreground(colorSuccess)
-	styleStopped  = lipgloss.NewStyle().Foreground(colorMuted)
-	styleFailed   = lipgloss.NewStyle().Foreground(colorError)
-	styleProxyOff = lipgloss.NewStyle().Foreground(colorAmber)
+	styleRunning = lipgloss.NewStyle().Foreground(colorSuccess)
+	styleStopped = lipgloss.NewStyle().Foreground(colorMuted)
+	styleFailed  = lipgloss.NewStyle().Foreground(colorError)
 
 	styleStatusBar = lipgloss.NewStyle().
 			Foreground(colorMuted)

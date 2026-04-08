@@ -90,8 +90,8 @@ func (m Model) renderServices() string {
 
 	nameWidth := 16
 	for _, svc := range m.services {
-		if len(svc.Name) > nameWidth {
-			nameWidth = len(svc.Name)
+		if n := len([]rune(svc.Name)); n > nameWidth {
+			nameWidth = n
 		}
 	}
 
@@ -190,7 +190,7 @@ func (m Model) renderLogs(available int) string {
 		start = 0
 	}
 
-	logWidth := m.width - 2
+	logWidth := max(0, m.width-2)
 
 	var b strings.Builder
 	b.WriteString(headerStr)
@@ -203,6 +203,9 @@ func (m Model) renderLogs(available int) string {
 		hEnd := hStart + logWidth
 		if hEnd > len(runes) {
 			hEnd = len(runes)
+		}
+		if hEnd < hStart {
+			hEnd = hStart
 		}
 		b.WriteString("  ")
 		b.WriteString(string(runes[hStart:hEnd]))

@@ -10,14 +10,6 @@ import (
 	"github.com/shahin-bayat/lokl/internal/types"
 )
 
-func TestStyleProxyOffExists(t *testing.T) {
-	want := lipgloss.Color("#F4A227")
-	got := styleProxyOff.GetForeground()
-	if got != want {
-		t.Errorf("styleProxyOff foreground: want %q, got %q", want, got)
-	}
-}
-
 func TestStyleLinkColorIsLightPurple(t *testing.T) {
 	wantColor := lipgloss.Color("#A78BFA")
 	if styleLink.GetForeground() != wantColor {
