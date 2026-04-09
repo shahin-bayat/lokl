@@ -69,7 +69,11 @@ func (m Model) renderHeader() string {
 	}
 
 	left := styleHeader.Render(name)
-	right := fmt.Sprintf("%s %d running", stateIndicator(runningCount > 0, true), runningCount)
+	countStyle := styleStopped
+	if runningCount > 0 {
+		countStyle = styleRunning
+	}
+	right := fmt.Sprintf("%s %s", stateIndicator(runningCount > 0, true), countStyle.Render(fmt.Sprintf("%d running", runningCount)))
 
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 0 {
@@ -84,10 +88,16 @@ func (m Model) renderServices() string {
 		return styleStopped.Render("  No services configured")
 	}
 
-	var b strings.Builder
+	nameWidth := 16
+	for _, svc := range m.services {
+		if n := len([]rune(svc.Name)); n > nameWidth {
+			nameWidth = n
+		}
+	}
 
+	var b strings.Builder
 	for i, svc := range m.services {
-		line := m.renderServiceRow(svc, i == m.selectedIdx)
+		line := m.renderServiceRow(svc, i == m.selectedIdx, nameWidth)
 		b.WriteString(line)
 		b.WriteString("\n")
 	}
@@ -95,14 +105,14 @@ func (m Model) renderServices() string {
 	return b.String()
 }
 
-func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
+func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool, nameWidth int) string {
 	cursor := "  "
 	if selected {
-		cursor = styleKeyHint.Render("▸ ")
+		cursor = styleKeyHint.Render("❯ ")
 	}
 
 	indicator := stateIndicator(svc.Running, svc.Healthy)
-	name := fmt.Sprintf("%-16s", svc.Name)
+	name := fmt.Sprintf("%-*s", nameWidth, svc.Name)
 
 	var domain string
 	if svc.Domain == "" {
@@ -113,7 +123,8 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
 		if svc.ProxyEnabled {
 			domain = "  " + styleLink.Render(paddedURL)
 		} else {
-			domain = styleFailed.Render("↗") + " " + styleDomain.Render(paddedURL)
+			localURL := fmt.Sprintf("%-30s", fmt.Sprintf("http://localhost:%d", svc.Port))
+			domain = "  " + styleDomain.Render(localURL)
 		}
 	}
 
@@ -132,13 +143,12 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool) string {
 	}
 	status = statusStyle.Render(status)
 
-	row := fmt.Sprintf("%s%s %s %s  %s  %s", cursor, indicator, name, domain, port, status)
+	body := fmt.Sprintf("%s %s %s  %s  %s", indicator, name, domain, port, status)
 
-	if selected {
-		row = styleSelected.Render(row)
+	if svc.Running && !svc.Healthy && !selected {
+		return cursor + lipgloss.NewStyle().Background(lipgloss.Color("#3D1E1E")).Render(body)
 	}
-
-	return row
+	return cursor + body
 }
 
 func (m Model) renderLogs(available int) string {
@@ -147,10 +157,9 @@ func (m Model) renderLogs(available int) string {
 		return ""
 	}
 
-	headerStr := "\n" +
-		styleDomain.Render(fmt.Sprintf("─── Logs: %s ", svc.Name)) +
-		styleDomain.Render(strings.Repeat("─", 40)) +
-		"\n\n"
+	prefix := fmt.Sprintf("─── Logs: %s ", svc.Name)
+	fill := max(0, m.width-lipgloss.Width(prefix))
+	headerStr := "\n" + styleDomain.Render(prefix+strings.Repeat("─", fill)) + "\n\n"
 
 	logs := m.controller.ServiceLogs(svc.Name)
 	if len(logs) == 0 {
@@ -181,14 +190,25 @@ func (m Model) renderLogs(available int) string {
 		start = 0
 	}
 
-	logWidth := m.width - 2
+	logWidth := max(0, m.width-2)
 
 	var b strings.Builder
 	b.WriteString(headerStr)
 	for _, line := range logs[start:end] {
-		line = sanitizeLog(line)
+		runes := []rune(sanitizeLog(line))
+		hStart := m.logHOffset
+		if hStart > len(runes) {
+			hStart = len(runes)
+		}
+		hEnd := hStart + logWidth
+		if hEnd > len(runes) {
+			hEnd = len(runes)
+		}
+		if hEnd < hStart {
+			hEnd = hStart
+		}
 		b.WriteString("  ")
-		b.WriteString(ansi.Truncate(line, logWidth, ""))
+		b.WriteString(string(runes[hStart:hEnd]))
 		b.WriteString("\n")
 	}
 
@@ -196,12 +216,14 @@ func (m Model) renderLogs(available int) string {
 }
 
 func (m Model) renderStatusBar() string {
+	divider := styleDomain.Render(strings.Repeat("─", m.width))
+
 	var keys []string
 	if m.showLogs {
 		keys = []string{
-			styleKeyHint.Render("k") + " scroll up",
-			styleKeyHint.Render("j") + " scroll down",
-			styleKeyHint.Render("l/esc") + " close logs",
+			styleKeyHint.Render("k/j/↑/↓") + " scroll",
+			styleKeyHint.Render("h/l/←/→") + " pan",
+			styleKeyHint.Render("esc") + " close",
 			styleKeyHint.Render("q") + " quit",
 		}
 	} else {
@@ -217,7 +239,7 @@ func (m Model) renderStatusBar() string {
 		}
 	}
 
-	return styleStatusBar.Render(strings.Join(keys, "  "))
+	return divider + "\n" + styleStatusBar.Render(strings.Join(keys, "  "))
 }
 
 func (m Model) renderHelp() string {
@@ -233,7 +255,10 @@ func (m Model) renderHelp() string {
 		{"x", "Stop selected service"},
 		{"r", "Restart selected service"},
 		{"p", "Toggle proxy (local/remote)"},
-		{"l", "Toggle log view"},
+		{"l", "Open log view"},
+		{"k/j", "Scroll logs up/down (↑/↓)"},
+		{"h/l", "Pan logs left/right (←/→)"},
+		{"esc", "Close log view"},
 		{"?", "Show/hide this help"},
 		{"q", "Quit lokl"},
 	}

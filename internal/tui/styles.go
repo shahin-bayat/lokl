@@ -3,11 +3,10 @@ package tui
 import "github.com/charmbracelet/lipgloss"
 
 var (
-	colorPrimary   = lipgloss.Color("#7D56F4")
-	colorSuccess   = lipgloss.Color("#73D216")
-	colorError     = lipgloss.Color("#FF4757")
-	colorMuted     = lipgloss.Color("#626262")
-	colorHighlight = lipgloss.Color("#3D3D5C")
+	colorPrimary = lipgloss.Color("#7D56F4")
+	colorSuccess = lipgloss.Color("#73D216")
+	colorError   = lipgloss.Color("#FF4757")
+	colorMuted   = lipgloss.Color("#626262")
 
 	styleHeader = lipgloss.NewStyle().
 			Bold(true).
@@ -16,10 +15,6 @@ var (
 	styleRunning = lipgloss.NewStyle().Foreground(colorSuccess)
 	styleStopped = lipgloss.NewStyle().Foreground(colorMuted)
 	styleFailed  = lipgloss.NewStyle().Foreground(colorError)
-
-	styleSelected = lipgloss.NewStyle().
-			Background(colorHighlight).
-			Bold(true)
 
 	styleStatusBar = lipgloss.NewStyle().
 			Foreground(colorMuted)
@@ -32,7 +27,7 @@ var (
 			Foreground(colorMuted)
 
 	styleLink = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00BFFF")).
+			Foreground(lipgloss.Color("#A78BFA")).
 			Bold(true)
 )
 

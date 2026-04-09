@@ -91,6 +91,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case "h", "left":
+		if m.showLogs && m.logHOffset > 0 {
+			m.logHOffset -= 4
+			if m.logHOffset < 0 {
+				m.logHOffset = 0
+			}
+		}
+
+	case "l", "right":
+		if m.showLogs {
+			m.logHOffset += 4
+		} else {
+			m.showLogs = true
+			m.logOffset = 0
+			m.logHOffset = 0
+			return m, logTick()
+		}
+
 	case "s":
 		if svc := m.selectedService(); svc != nil {
 			_ = m.controller.StartService(svc.Name)
@@ -112,17 +130,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.refreshServices()
 		}
 
-	case "l":
-		m.showLogs = !m.showLogs
-		m.logOffset = 0
-		if m.showLogs {
-			return m, logTick()
-		}
-
 	case "esc":
 		if m.showLogs {
 			m.showLogs = false
 			m.logOffset = 0
+			m.logHOffset = 0
 		}
 	}
 
