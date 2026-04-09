@@ -123,8 +123,7 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool, nameWidth 
 		if svc.ProxyEnabled {
 			domain = "  " + styleLink.Render(paddedURL)
 		} else {
-			localURL := fmt.Sprintf("%-30s", fmt.Sprintf("http://localhost:%d", svc.Port))
-			domain = "  " + styleDomain.Render(localURL)
+			domain = "  " + styleDomain.Render(paddedURL)
 		}
 	}
 
