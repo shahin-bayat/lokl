@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
@@ -123,8 +124,7 @@ func (m Model) renderServiceRow(svc types.ServiceInfo, selected bool, nameWidth 
 		if svc.ProxyEnabled {
 			domain = "  " + styleLink.Render(paddedURL)
 		} else {
-			localURL := fmt.Sprintf("%-30s", fmt.Sprintf("http://localhost:%d", svc.Port))
-			domain = "  " + styleDomain.Render(localURL)
+			domain = "  " + styleDomain.Render(paddedURL)
 		}
 	}
 
@@ -218,12 +218,17 @@ func (m Model) renderLogs(available int) string {
 func (m Model) renderStatusBar() string {
 	divider := styleDomain.Render(strings.Repeat("─", m.width))
 
+	if m.copyMsg != "" && time.Now().Before(m.copyExpiry) {
+		return divider + "\n" + styleStatusBar.Render(m.copyMsg)
+	}
+
 	var keys []string
 	if m.showLogs {
 		keys = []string{
 			styleKeyHint.Render("k/j/↑/↓") + " scroll",
 			styleKeyHint.Render("h/l/←/→") + " pan",
 			styleKeyHint.Render("esc") + " close",
+			styleKeyHint.Render("c") + " copy",
 			styleKeyHint.Render("q") + " quit",
 		}
 	} else {
@@ -234,6 +239,7 @@ func (m Model) renderStatusBar() string {
 			styleKeyHint.Render("r") + " restart",
 			styleKeyHint.Render("p") + " toggle",
 			styleKeyHint.Render("l") + " logs",
+			styleKeyHint.Render("c") + " copy",
 			styleKeyHint.Render("?") + " help",
 			styleKeyHint.Render("q") + " quit",
 		}
@@ -256,6 +262,7 @@ func (m Model) renderHelp() string {
 		{"r", "Restart selected service"},
 		{"p", "Toggle proxy (local/remote)"},
 		{"l", "Open log view"},
+		{"c", "Copy logs to clipboard"},
 		{"k/j", "Scroll logs up/down (↑/↓)"},
 		{"h/l", "Pan logs left/right (←/→)"},
 		{"esc", "Close log view"},
