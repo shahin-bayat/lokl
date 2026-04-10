@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"bytes"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -25,6 +24,9 @@ func copyToClipboard(lines []string) error {
 		return fmt.Errorf("no clipboard tool found (install pbcopy, xclip, or xsel)")
 	}
 
-	cmd.Stdin = bytes.NewBufferString(b.String())
-	return cmd.Run()
+	cmd.Stdin = strings.NewReader(b.String())
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("clipboard write: %w", err)
+	}
+	return nil
 }
