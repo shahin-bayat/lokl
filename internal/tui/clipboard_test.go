@@ -36,7 +36,21 @@ func TestCopyFlashHiddenAfterExpiry(t *testing.T) {
 	}
 }
 
-func TestCopyDoneMsgClearsFlash(t *testing.T) {
+func TestCopyDoneMsgClearsFlashWhenExpired(t *testing.T) {
+	m := newTestModel(nil)
+	m.copyMsg = "Logs copied"
+	m.copyExpiry = time.Now().Add(-1 * time.Millisecond) // just expired
+
+	next, _ := m.Update(copyDoneMsg{})
+	nm := next.(Model)
+
+	if nm.copyMsg != "" {
+		t.Errorf("copyDoneMsg should clear copyMsg after expiry; got %q", nm.copyMsg)
+	}
+}
+
+func TestCopyDoneMsgKeepsFlashWhenNotExpired(t *testing.T) {
+	// simulates stale first timer after a second press reset the expiry
 	m := newTestModel(nil)
 	m.copyMsg = "Logs copied"
 	m.copyExpiry = time.Now().Add(2 * time.Second)
@@ -44,8 +58,8 @@ func TestCopyDoneMsgClearsFlash(t *testing.T) {
 	next, _ := m.Update(copyDoneMsg{})
 	nm := next.(Model)
 
-	if nm.copyMsg != "" {
-		t.Errorf("copyDoneMsg should clear copyMsg; got %q", nm.copyMsg)
+	if nm.copyMsg == "" {
+		t.Error("stale copyDoneMsg should not clear copyMsg when expiry is still active")
 	}
 }
 

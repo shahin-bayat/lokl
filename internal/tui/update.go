@@ -56,7 +56,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case copyDoneMsg:
-		m.copyMsg = ""
+		if time.Now().After(m.copyExpiry) {
+			m.copyMsg = ""
+		}
 		return m, nil
 	}
 
