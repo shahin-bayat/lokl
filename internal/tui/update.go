@@ -9,9 +9,17 @@ import (
 )
 
 const logPollInterval = 200 * time.Millisecond
+const copyFlashDuration = 1500 * time.Millisecond
 
 type eventMsg types.Event
 type logTickMsg struct{}
+type copyDoneMsg struct{}
+
+func copyFlashTimeout() tea.Cmd {
+	return tea.Tick(copyFlashDuration, func(time.Time) tea.Msg {
+		return copyDoneMsg{}
+	})
+}
 
 func (m Model) waitForEvent() tea.Msg {
 	return eventMsg(<-m.events)
@@ -45,6 +53,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.showLogs {
 			return m, logTick()
 		}
+		return m, nil
+
+	case copyDoneMsg:
+		m.copyMsg = ""
 		return m, nil
 	}
 
@@ -128,6 +140,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if svc := m.selectedService(); svc != nil && svc.Domain != "" {
 			_, _ = m.controller.ToggleProxy(svc.Name)
 			m.refreshServices()
+		}
+
+	case "c":
+		if svc := m.selectedService(); svc != nil {
+			logs := m.controller.ServiceLogs(svc.Name)
+			if err := copyToClipboard(logs); err != nil {
+				m.copyMsg = "Copy failed"
+			} else {
+				m.copyMsg = "Logs copied"
+			}
+			m.copyExpiry = time.Now().Add(copyFlashDuration)
+			return m, copyFlashTimeout()
 		}
 
 	case "esc":
