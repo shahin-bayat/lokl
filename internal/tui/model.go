@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/shahin-bayat/lokl/internal/types"
+import (
+	"time"
+
+	"github.com/shahin-bayat/lokl/internal/types"
+)
 
 // ServiceController defines what the TUI needs to control and display services.
 type ServiceController interface {
@@ -27,6 +31,8 @@ type Model struct {
 	width       int
 	height      int
 	quitting    bool
+	copyMsg     string
+	copyExpiry  time.Time
 }
 
 func newModel(ctrl ServiceController) Model {
