@@ -43,6 +43,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.searchInput.Width = max(0, msg.Width-4)
 		return m, nil
 
 	case eventMsg:
