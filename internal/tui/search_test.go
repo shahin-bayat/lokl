@@ -263,7 +263,7 @@ func TestStatusBarShowsSlashHintInLogView(t *testing.T) {
 
 	bar := m.renderStatusBar()
 	stripped := ansi.Strip(bar)
-	if !strings.Contains(stripped, "search") {
-		t.Errorf("status bar in log view should show '/' search hint; got: %q", stripped)
+	if !strings.Contains(stripped, "/ search") {
+		t.Errorf("status bar in log view should show '/ search' hint; got: %q", stripped)
 	}
 }
