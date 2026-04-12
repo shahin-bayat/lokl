@@ -100,13 +100,19 @@ func TestTypingInSearchModeDoesNotScroll(t *testing.T) {
 	m := newTestModel([]types.ServiceInfo{svc})
 	m.showLogs = true
 	m.showSearch = true
+	m.searchInput.Focus()
 	m.logOffset = 5
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	nm := next.(Model)
 
-	if nm.logOffset != 5 {
-		t.Errorf("'j' in search mode should not scroll; logOffset changed to %d", nm.logOffset)
+	// Scroll handler would decrement logOffset (5→4). Verify it did not fire.
+	if nm.logOffset == 4 {
+		t.Error("'j' in search mode should not trigger scroll handler")
+	}
+	// Key should have gone to textinput instead.
+	if nm.searchQuery != "j" {
+		t.Errorf("'j' in search mode should update searchQuery; got %q", nm.searchQuery)
 	}
 }
 

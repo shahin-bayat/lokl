@@ -67,7 +67,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Search mode: all keys feed the text input except esc and enter.
+	// Intercept before normal handlers so search input captures j/k/q/etc.
 	if m.showSearch {
 		switch msg.String() {
 		case "esc":
