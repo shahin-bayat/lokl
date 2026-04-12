@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
+
 	"github.com/shahin-bayat/lokl/internal/types"
 )
 
