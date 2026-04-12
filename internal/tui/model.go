@@ -43,7 +43,7 @@ func newModel(ctrl ServiceController) Model {
 	ti := textinput.New()
 	ti.Placeholder = "search logs..."
 	ti.CharLimit = 256
-	ti.Width = 76 // updated on WindowSizeMsg
+	ti.Width = 76
 
 	m := Model{
 		controller:  ctrl,
