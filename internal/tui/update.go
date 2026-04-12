@@ -174,7 +174,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "c":
 		if svc := m.selectedService(); svc != nil {
-			logs := m.controller.ServiceLogs(svc.Name)
+			logs := filterLogs(m.controller.ServiceLogs(svc.Name), m.searchQuery)
 			if err := copyToClipboard(logs); err != nil {
 				m.copyMsg = "Copy failed"
 			} else {
