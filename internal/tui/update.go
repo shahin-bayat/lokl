@@ -67,6 +67,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Search mode: all keys feed the text input except esc and enter.
+	if m.showSearch {
+		switch msg.String() {
+		case "esc":
+			m.showSearch = false
+			m.searchQuery = ""
+			m.searchInput.SetValue("")
+			m.searchInput.Blur()
+			return m, nil
+		case "enter":
+			m.showSearch = false
+			m.searchInput.Blur()
+			return m, nil
+		}
+		prev := m.searchQuery
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		m.searchQuery = m.searchInput.Value()
+		if m.searchQuery != prev {
+			m.logOffset = 0
+		}
+		return m, cmd
+	}
+
 	if m.showHelp {
 		switch msg.String() {
 		case "?", "esc", "q":
@@ -155,6 +179,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.copyExpiry = time.Now().Add(copyFlashDuration)
 			return m, copyFlashTimeout()
+		}
+
+	case "/":
+		if m.showLogs {
+			m.showSearch = true
+			m.searchInput.Focus()
+			return m, nil
 		}
 
 	case "esc":
