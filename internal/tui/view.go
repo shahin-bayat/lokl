@@ -26,6 +26,25 @@ func sanitizeLog(s string) string {
 	return b.String()
 }
 
+func filterLogs(logs []string, query string) []string {
+	if query == "" {
+		return logs
+	}
+	q := strings.ToLower(query)
+	out := make([]string, 0, len(logs))
+	for _, line := range logs {
+		if strings.Contains(strings.ToLower(sanitizeLog(line)), q) {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func (m Model) renderSearchBar() string {
+	label := styleDomain.Render("/")
+	return label + " " + m.searchInput.View()
+}
+
 func (m Model) View() string {
 	if m.quitting {
 		return "Shutting down...\n"
@@ -157,22 +176,39 @@ func (m Model) renderLogs(available int) string {
 		return ""
 	}
 
-	prefix := fmt.Sprintf("─── Logs: %s ", svc.Name)
+	logs := m.controller.ServiceLogs(svc.Name)
+	filtered := filterLogs(logs, m.searchQuery)
+
+	var prefix string
+	if m.searchQuery != "" {
+		prefix = fmt.Sprintf("─── Logs: %s (%d/%d matching) ", svc.Name, len(filtered), len(logs))
+	} else {
+		prefix = fmt.Sprintf("─── Logs: %s ", svc.Name)
+	}
 	fill := max(0, m.width-lipgloss.Width(prefix))
 	headerStr := "\n" + styleDomain.Render(prefix+strings.Repeat("─", fill)) + "\n\n"
 
-	logs := m.controller.ServiceLogs(svc.Name)
-	if len(logs) == 0 {
-		return headerStr + styleStopped.Render("  No logs available") + "\n"
+	searchBar := ""
+	searchLines := 0
+	if m.showSearch {
+		searchBar = m.renderSearchBar() + "\n"
+		searchLines = 1
 	}
 
-	maxLogLines := available - strings.Count(headerStr, "\n")
+	if len(logs) == 0 {
+		return headerStr + searchBar + styleStopped.Render("  No logs available") + "\n"
+	}
+	if len(filtered) == 0 {
+		return headerStr + searchBar + styleStopped.Render("  No matching lines") + "\n"
+	}
+
+	maxLogLines := available - strings.Count(headerStr, "\n") - searchLines
 	if maxLogLines < 1 {
 		return ""
 	}
 
 	// cap offset so scrolling to the top always shows a full screenful
-	maxOffset := len(logs) - maxLogLines
+	maxOffset := len(filtered) - maxLogLines
 	if maxOffset < 0 {
 		maxOffset = 0
 	}
@@ -181,7 +217,7 @@ func (m Model) renderLogs(available int) string {
 		offset = maxOffset
 	}
 
-	end := len(logs) - offset
+	end := len(filtered) - offset
 	if end < 0 {
 		end = 0
 	}
@@ -194,7 +230,8 @@ func (m Model) renderLogs(available int) string {
 
 	var b strings.Builder
 	b.WriteString(headerStr)
-	for _, line := range logs[start:end] {
+	b.WriteString(searchBar)
+	for _, line := range filtered[start:end] {
 		runes := []rune(sanitizeLog(line))
 		hStart := m.logHOffset
 		if hStart > len(runes) {
@@ -227,6 +264,7 @@ func (m Model) renderStatusBar() string {
 		keys = []string{
 			styleKeyHint.Render("k/j/↑/↓") + " scroll",
 			styleKeyHint.Render("h/l/←/→") + " pan",
+			styleKeyHint.Render("/") + " search",
 			styleKeyHint.Render("esc") + " close",
 			styleKeyHint.Render("c") + " copy",
 			styleKeyHint.Render("q") + " quit",
@@ -262,10 +300,11 @@ func (m Model) renderHelp() string {
 		{"r", "Restart selected service"},
 		{"p", "Toggle proxy (local/remote)"},
 		{"l", "Open log view"},
+		{"/", "Search/filter logs"},
 		{"c", "Copy logs to clipboard"},
 		{"k/j", "Scroll logs up/down (↑/↓)"},
 		{"h/l", "Pan logs left/right (←/→)"},
-		{"esc", "Close log view"},
+		{"esc", "Close log view / exit search"},
 		{"?", "Show/hide this help"},
 		{"q", "Quit lokl"},
 	}
