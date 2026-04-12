@@ -80,6 +80,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.showSearch = false
 			m.searchInput.Blur()
 			return m, nil
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
 		}
 		prev := m.searchQuery
 		var cmd tea.Cmd

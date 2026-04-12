@@ -118,6 +118,22 @@ func TestTypingInSearchModeDoesNotScroll(t *testing.T) {
 	}
 }
 
+func TestCtrlCInSearchModeQuits(t *testing.T) {
+	m := newTestModel(nil)
+	m.showLogs = true
+	m.showSearch = true
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	nm := next.(Model)
+
+	if !nm.quitting {
+		t.Error("ctrl+c in search mode should set quitting=true")
+	}
+	if cmd == nil {
+		t.Error("ctrl+c in search mode should return tea.Quit cmd")
+	}
+}
+
 func TestQueryChangeResetsLogOffset(t *testing.T) {
 	m := newTestModel(nil)
 	m.showLogs = true
