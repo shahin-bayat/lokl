@@ -260,7 +260,12 @@ func (m Model) renderStatusBar() string {
 	}
 
 	var keys []string
-	if m.showLogs {
+	if m.showSearch {
+		keys = []string{
+			styleKeyHint.Render("enter") + " apply filter",
+			styleKeyHint.Render("esc") + " cancel",
+		}
+	} else if m.showLogs {
 		keys = []string{
 			styleKeyHint.Render("k/j/↑/↓") + " scroll",
 			styleKeyHint.Render("h/l/←/→") + " pan",
