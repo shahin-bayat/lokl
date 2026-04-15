@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/runner"
 	"github.com/shahin-bayat/lokl/internal/types"
 )
 
@@ -46,7 +47,7 @@ func (e *DNSNotConfiguredError) Error() string {
 const eventBufferSize = 100
 
 // ProcessFactory creates a new process runner.
-type ProcessFactory func(name string, svc config.Service, onChange func()) ProcessRunner
+type ProcessFactory func(name string, svc config.Service, onChange func(), onCrash func()) ProcessRunner
 
 type Supervisor struct {
 	cfg            *config.Config
@@ -138,7 +139,10 @@ func (s *Supervisor) StartService(name string) error {
 	onChange := func() {
 		s.emit(types.Event{Type: types.EventServiceStateChanged, Service: name})
 	}
-	p := s.processFactory(name, svc, onChange)
+	onCrash := func() {
+		go runner.Notify(s.cfg.Name, name)
+	}
+	p := s.processFactory(name, svc, onChange, onCrash)
 	if err := p.Start(); err != nil {
 		return fmt.Errorf("starting %s: %w", name, err)
 	}

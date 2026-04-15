@@ -178,7 +178,7 @@ func boolPtr(v bool) *bool { return &v }
 
 func TestStartService(t *testing.T) {
 	var created []string
-	factory := func(name string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(name string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		created = append(created, name)
 		return &mockRunner{}
 	}
@@ -198,7 +198,7 @@ func TestStartService(t *testing.T) {
 
 func TestStartServiceIdempotent(t *testing.T) {
 	calls := 0
-	factory := func(_ string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(_ string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		calls++
 		return &mockRunner{}
 	}
@@ -227,7 +227,7 @@ func TestStartServiceUnknown(t *testing.T) {
 }
 
 func TestStartServiceStartError(t *testing.T) {
-	factory := func(_ string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(_ string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			StartFn: func() error { return errTest },
 		}
@@ -248,7 +248,7 @@ func TestStartServiceStartError(t *testing.T) {
 
 func TestStopService(t *testing.T) {
 	stopped := false
-	factory := func(_ string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(_ string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			StopFn: func() error { stopped = true; return nil },
 		}
@@ -284,7 +284,7 @@ func TestStopServiceNotRunning(t *testing.T) {
 
 func TestRestartService(t *testing.T) {
 	var sequence []string
-	factory := func(_ string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(_ string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			StartFn: func() error { sequence = append(sequence, "start"); return nil },
 			StopFn:  func() error { sequence = append(sequence, "stop"); return nil },
@@ -309,7 +309,7 @@ func TestRestartService(t *testing.T) {
 
 func TestStart(t *testing.T) {
 	var started []string
-	factory := func(name string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(name string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			StartFn: func() error { started = append(started, name); return nil },
 		}
@@ -339,7 +339,7 @@ func TestStart(t *testing.T) {
 
 func TestStartSkipsAutoStartFalse(t *testing.T) {
 	var started []string
-	factory := func(name string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(name string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			StartFn: func() error { started = append(started, name); return nil },
 		}
@@ -369,7 +369,7 @@ func TestStartSkipsAutoStartFalse(t *testing.T) {
 func TestStartServiceFailureTriggersCleanup(t *testing.T) {
 	var stopped []string
 	callCount := 0
-	factory := func(name string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(name string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			StartFn: func() error {
 				callCount++
@@ -406,7 +406,7 @@ func TestStartServiceFailureTriggersCleanup(t *testing.T) {
 
 func TestStartNoProxy(t *testing.T) {
 	var started []string
-	factory := func(name string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(name string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			StartFn: func() error { started = append(started, name); return nil },
 		}
@@ -427,7 +427,7 @@ func TestStartNoProxy(t *testing.T) {
 
 func TestStop(t *testing.T) {
 	proxyStopped := false
-	factory := func(_ string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(_ string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{}
 	}
 
@@ -512,7 +512,7 @@ func TestToggleProxyNoRoute(t *testing.T) {
 }
 
 func TestServices(t *testing.T) {
-	factory := func(_ string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(_ string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			IsRunningFn: func() bool { return true },
 			IsHealthyFn: func() bool { return true },
@@ -576,7 +576,7 @@ func TestServicesWithPathPrefix(t *testing.T) {
 }
 
 func TestServiceLogs(t *testing.T) {
-	factory := func(_ string, _ config.Service, _ func()) ProcessRunner {
+	factory := func(_ string, _ config.Service, _ func(), _ func()) ProcessRunner {
 		return &mockRunner{
 			LogsFn: func() []string { return []string{"line1", "line2"} },
 		}
