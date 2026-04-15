@@ -27,20 +27,23 @@ type Process struct {
 	state    runner.State
 	healthy  bool
 	onChange func()
+	onCrash  func()
 
-	cmd    *exec.Cmd
-	logs   *runner.Logs
-	cancel context.CancelFunc
-	exitCh chan struct{}
-	mu     sync.Mutex
+	manuallyStopped bool
+	cmd             *exec.Cmd
+	logs            *runner.Logs
+	cancel          context.CancelFunc
+	exitCh          chan struct{}
+	mu              sync.Mutex
 }
 
-func New(name string, cfg config.Service, onChange func()) *Process {
+func New(name string, cfg config.Service, onChange func(), onCrash func()) *Process {
 	return &Process{
 		name:     name,
 		config:   cfg,
 		state:    runner.StateStopped,
 		onChange: onChange,
+		onCrash:  onCrash,
 	}
 }
 
@@ -127,6 +130,7 @@ func (p *Process) Start() error {
 		_ = p.cmd.Wait()
 		_ = pr.Close()
 		p.mu.Lock()
+		shouldNotify := !p.healthy && !p.manuallyStopped && p.state == runner.StateRunning
 		if p.state == runner.StateRunning {
 			p.state = runner.StateFailed
 		}
@@ -135,6 +139,9 @@ func (p *Process) Start() error {
 			p.cancel()
 		}
 		p.mu.Unlock()
+		if shouldNotify {
+			p.onCrash()
+		}
 		p.onChange()
 		close(p.exitCh)
 	}()
@@ -147,6 +154,9 @@ func (p *Process) Start() error {
 		timeout, _ := time.ParseDuration(p.config.Health.Timeout)
 		retries := *p.config.Health.Retries
 		go runner.RunHealthCheck(ctx, p.config.Port, p.config.Health.Path, interval, timeout, retries, func(healthy bool) {
+			if !healthy {
+				p.onCrash()
+			}
 			p.mu.Lock()
 			p.healthy = healthy
 			p.mu.Unlock()
@@ -174,6 +184,7 @@ func (p *Process) Stop() error {
 		p.mu.Unlock()
 		return nil
 	}
+	p.manuallyStopped = true
 	p.state = runner.StateStopping
 	exitCh := p.exitCh
 	pgid := p.cmd.Process.Pid

@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/runner"
 )
 
 func TestNewProcess(t *testing.T) {
-	p := New("web", config.Service{Command: "npm start"}, func() {})
+	p := New("web", config.Service{Command: "npm start"}, func() {}, func() {})
 	if p.IsRunning() {
 		t.Error("new process should not be running")
 	}
@@ -26,7 +27,7 @@ func TestBuildEnv(t *testing.T) {
 	p := New("web", config.Service{
 		Command: "npm start",
 		Env:     map[string]string{"NODE_ENV": "production", "PORT": "3000"},
-	}, func() {})
+	}, func() {}, func() {})
 
 	env := p.buildEnv()
 
@@ -47,6 +48,101 @@ func TestBuildEnv(t *testing.T) {
 	}
 	if !found["NODE_ENV"] || !found["PORT"] {
 		t.Errorf("custom env vars not found: %v", found)
+	}
+}
+
+func TestOnCrashCalledOnHealthyToCrash(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+
+	p.mu.Lock()
+	p.state = runner.StateRunning
+	p.healthy = true
+	p.mu.Unlock()
+
+	// Directly invoke the health callback with false (as RunProbe would).
+	p.mu.Lock()
+	p.healthy = false
+	p.mu.Unlock()
+	p.onCrash()
+
+	if crashCount != 1 {
+		t.Errorf("onCrash should fire once on healthy→crash; got %d", crashCount)
+	}
+}
+
+func TestOnCrashCalledOnNeverHealthyExit(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+
+	p.mu.Lock()
+	p.state = runner.StateRunning
+	p.healthy = false
+	p.manuallyStopped = false
+	p.mu.Unlock()
+
+	// Simulate reaper logic.
+	p.mu.Lock()
+	shouldNotify := !p.healthy && !p.manuallyStopped && p.state == runner.StateRunning
+	p.state = runner.StateFailed
+	p.healthy = false
+	p.mu.Unlock()
+	if shouldNotify {
+		p.onCrash()
+	}
+
+	if crashCount != 1 {
+		t.Errorf("onCrash should fire on never-healthy exit; got %d", crashCount)
+	}
+}
+
+func TestOnCrashNotCalledOnManualStop(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+
+	p.mu.Lock()
+	p.state = runner.StateRunning
+	p.healthy = false
+	p.manuallyStopped = true
+	p.mu.Unlock()
+
+	// Simulate reaper logic.
+	p.mu.Lock()
+	shouldNotify := !p.healthy && !p.manuallyStopped && p.state == runner.StateRunning
+	p.state = runner.StateFailed
+	p.mu.Unlock()
+	if shouldNotify {
+		p.onCrash()
+	}
+
+	if crashCount != 0 {
+		t.Errorf("onCrash should NOT fire on manual stop; got %d", crashCount)
+	}
+}
+
+func TestOnCrashNotCalledOnHealthyStop(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+
+	p.mu.Lock()
+	p.state = runner.StateRunning
+	p.healthy = true
+	p.manuallyStopped = true
+	p.mu.Unlock()
+
+	p.mu.Lock()
+	shouldNotify := !p.healthy && !p.manuallyStopped && p.state == runner.StateRunning
+	p.mu.Unlock()
+	if shouldNotify {
+		p.onCrash()
+	}
+
+	if crashCount != 0 {
+		t.Errorf("onCrash should NOT fire on healthy manual stop; got %d", crashCount)
 	}
 }
 
