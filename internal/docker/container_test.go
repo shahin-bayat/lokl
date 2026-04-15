@@ -530,10 +530,14 @@ func TestContainerOnCrashCalledOnHealthyToCrash(t *testing.T) {
 	c.healthy = true
 	c.mu.Unlock()
 
+	// Simulate wasHealthy check in health callback.
 	c.mu.Lock()
+	wasHealthy := c.healthy
 	c.healthy = false
 	c.mu.Unlock()
-	c.onCrash()
+	if wasHealthy {
+		c.onCrash()
+	}
 
 	if crashCount != 1 {
 		t.Errorf("onCrash should fire once on healthy→crash; got %d", crashCount)
@@ -551,8 +555,9 @@ func TestContainerOnCrashCalledOnNeverHealthyExit(t *testing.T) {
 	c.manuallyStopped = false
 	c.mu.Unlock()
 
+	// Simulate watchContainer: fires regardless of healthy state.
 	c.mu.Lock()
-	shouldNotify := !c.healthy && !c.manuallyStopped && c.state == runner.StateRunning
+	shouldNotify := !c.manuallyStopped && c.state == runner.StateRunning
 	if c.state == runner.StateRunning {
 		c.state = runner.StateFailed
 		c.healthy = false
@@ -567,6 +572,35 @@ func TestContainerOnCrashCalledOnNeverHealthyExit(t *testing.T) {
 	}
 }
 
+func TestContainerOnCrashCalledOnHealthyExit(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	c := NewContainer("db", config.Service{Image: "postgres"}, nil, "", func() {}, onCrash)
+
+	// Simulate: container was healthy (no health check → healthy=true immediately) and crashes.
+	c.mu.Lock()
+	c.state = runner.StateRunning
+	c.healthy = true
+	c.manuallyStopped = false
+	c.mu.Unlock()
+
+	// Simulate watchContainer: fires regardless of healthy state.
+	c.mu.Lock()
+	shouldNotify := !c.manuallyStopped && c.state == runner.StateRunning
+	if c.state == runner.StateRunning {
+		c.state = runner.StateFailed
+		c.healthy = false
+	}
+	c.mu.Unlock()
+	if shouldNotify {
+		c.onCrash()
+	}
+
+	if crashCount != 1 {
+		t.Errorf("onCrash should fire on healthy container exit; got %d", crashCount)
+	}
+}
+
 func TestContainerOnCrashNotCalledOnManualStop(t *testing.T) {
 	var crashCount int
 	onCrash := func() { crashCount++ }
@@ -578,8 +612,9 @@ func TestContainerOnCrashNotCalledOnManualStop(t *testing.T) {
 	c.manuallyStopped = true
 	c.mu.Unlock()
 
+	// manuallyStopped=true suppresses notification.
 	c.mu.Lock()
-	shouldNotify := !c.healthy && !c.manuallyStopped && c.state == runner.StateRunning
+	shouldNotify := !c.manuallyStopped && c.state == runner.StateRunning
 	if c.state == runner.StateRunning {
 		c.state = runner.StateFailed
 		c.healthy = false
@@ -594,7 +629,7 @@ func TestContainerOnCrashNotCalledOnManualStop(t *testing.T) {
 	}
 }
 
-func TestContainerOnCrashNotCalledOnHealthyStop(t *testing.T) {
+func TestContainerOnCrashNotCalledOnHealthyManualStop(t *testing.T) {
 	var crashCount int
 	onCrash := func() { crashCount++ }
 	c := NewContainer("db", config.Service{Image: "postgres"}, nil, "", func() {}, onCrash)
@@ -605,8 +640,9 @@ func TestContainerOnCrashNotCalledOnHealthyStop(t *testing.T) {
 	c.manuallyStopped = true
 	c.mu.Unlock()
 
+	// manuallyStopped=true suppresses even when healthy.
 	c.mu.Lock()
-	shouldNotify := !c.healthy && !c.manuallyStopped && c.state == runner.StateRunning
+	shouldNotify := !c.manuallyStopped && c.state == runner.StateRunning
 	c.mu.Unlock()
 	if shouldNotify {
 		c.onCrash()

@@ -77,6 +77,7 @@ func (c *Container) Start() error {
 		c.mu.Unlock()
 		return fmt.Errorf("container %s: cannot start from state %s", c.name, c.state)
 	}
+	c.manuallyStopped = false
 	c.state = runner.StateStarting
 	c.logs = runner.NewLogs(maxLogLines)
 	c.mu.Unlock()
@@ -166,24 +167,26 @@ func (c *Container) Start() error {
 			}
 			return err == nil && code == 0
 		}, interval, retries, func(healthy bool) {
-			if !healthy {
-				c.onCrash()
-			}
 			c.mu.Lock()
+			wasHealthy := c.healthy
 			c.healthy = healthy
 			c.mu.Unlock()
+			if !healthy && wasHealthy {
+				c.onCrash()
+			}
 			c.onChange()
 		})
 
 	case c.config.Health != nil && c.config.Health.Path != "":
 		interval, timeout, retries := parseHealthParams(c.config.Health)
 		go runner.RunHealthCheck(runCtx, c.config.Port, c.config.Health.Path, interval, timeout, retries, func(healthy bool) {
-			if !healthy {
-				c.onCrash()
-			}
 			c.mu.Lock()
+			wasHealthy := c.healthy
 			c.healthy = healthy
 			c.mu.Unlock()
+			if !healthy && wasHealthy {
+				c.onCrash()
+			}
 			c.onChange()
 		})
 
@@ -262,7 +265,7 @@ func (c *Container) watchContainer(ctx context.Context, containerID string) {
 			running, err := c.api.IsContainerRunning(ctx, containerID)
 			if err != nil || !running {
 				c.mu.Lock()
-				shouldNotify := !c.healthy && !c.manuallyStopped && c.state == runner.StateRunning
+				shouldNotify := !c.manuallyStopped && c.state == runner.StateRunning
 				if c.state == runner.StateRunning {
 					c.state = runner.StateFailed
 					c.healthy = false

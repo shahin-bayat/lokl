@@ -80,6 +80,7 @@ func (p *Process) Start() error {
 		}
 	}
 
+	p.manuallyStopped = false
 	p.state = runner.StateStarting
 
 	// exec replaces the shell so there's one process to manage, not sh + child.
@@ -130,7 +131,7 @@ func (p *Process) Start() error {
 		_ = p.cmd.Wait()
 		_ = pr.Close()
 		p.mu.Lock()
-		shouldNotify := !p.healthy && !p.manuallyStopped && p.state == runner.StateRunning
+		shouldNotify := !p.manuallyStopped && p.state == runner.StateRunning
 		if p.state == runner.StateRunning {
 			p.state = runner.StateFailed
 		}
@@ -154,12 +155,13 @@ func (p *Process) Start() error {
 		timeout, _ := time.ParseDuration(p.config.Health.Timeout)
 		retries := *p.config.Health.Retries
 		go runner.RunHealthCheck(ctx, p.config.Port, p.config.Health.Path, interval, timeout, retries, func(healthy bool) {
-			if !healthy {
-				p.onCrash()
-			}
 			p.mu.Lock()
+			wasHealthy := p.healthy
 			p.healthy = healthy
 			p.mu.Unlock()
+			if !healthy && wasHealthy {
+				p.onCrash()
+			}
 			p.onChange()
 		})
 	}
