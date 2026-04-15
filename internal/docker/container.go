@@ -31,14 +31,16 @@ type Container struct {
 	state    runner.State
 	healthy  bool
 	onChange func()
+	onCrash  func()
 
-	containerID string
-	logs        *runner.Logs
-	cancel      context.CancelFunc
-	mu          sync.Mutex
+	manuallyStopped bool
+	containerID     string
+	logs            *runner.Logs
+	cancel          context.CancelFunc
+	mu              sync.Mutex
 }
 
-func NewContainer(name string, cfg config.Service, api DockerAPI, network string, onChange func()) *Container {
+func NewContainer(name string, cfg config.Service, api DockerAPI, network string, onChange func(), onCrash func()) *Container {
 	return &Container{
 		name:     name,
 		config:   cfg,
@@ -46,6 +48,7 @@ func NewContainer(name string, cfg config.Service, api DockerAPI, network string
 		network:  network,
 		state:    runner.StateStopped,
 		onChange: onChange,
+		onCrash:  onCrash,
 	}
 }
 
@@ -163,6 +166,9 @@ func (c *Container) Start() error {
 			}
 			return err == nil && code == 0
 		}, interval, retries, func(healthy bool) {
+			if !healthy {
+				c.onCrash()
+			}
 			c.mu.Lock()
 			c.healthy = healthy
 			c.mu.Unlock()
@@ -172,6 +178,9 @@ func (c *Container) Start() error {
 	case c.config.Health != nil && c.config.Health.Path != "":
 		interval, timeout, retries := parseHealthParams(c.config.Health)
 		go runner.RunHealthCheck(runCtx, c.config.Port, c.config.Health.Path, interval, timeout, retries, func(healthy bool) {
+			if !healthy {
+				c.onCrash()
+			}
 			c.mu.Lock()
 			c.healthy = healthy
 			c.mu.Unlock()
@@ -194,6 +203,7 @@ func (c *Container) Stop() error {
 		c.mu.Unlock()
 		return nil
 	}
+	c.manuallyStopped = true
 	c.state = runner.StateStopping
 	c.healthy = false
 	id := c.containerID
@@ -252,11 +262,15 @@ func (c *Container) watchContainer(ctx context.Context, containerID string) {
 			running, err := c.api.IsContainerRunning(ctx, containerID)
 			if err != nil || !running {
 				c.mu.Lock()
+				shouldNotify := !c.healthy && !c.manuallyStopped && c.state == runner.StateRunning
 				if c.state == runner.StateRunning {
 					c.state = runner.StateFailed
 					c.healthy = false
 				}
 				c.mu.Unlock()
+				if shouldNotify {
+					c.onCrash()
+				}
 				c.onChange()
 				return
 			}

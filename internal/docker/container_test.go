@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/runner"
 )
 
 var _ DockerAPI = (*mockAPI)(nil)
@@ -132,7 +133,7 @@ func (m *mockAPI) NetworkConnect(ctx context.Context, networkID string, opts int
 }
 
 func TestContainerStartStop(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {}, func() {})
 
 	if c.IsRunning() {
 		t.Fatal("expected not running before start")
@@ -171,7 +172,7 @@ func TestContainerStartPullsImage(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx:latest"}, mock, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx:latest"}, mock, "", func() {}, func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -198,7 +199,7 @@ func TestContainerStartCleansStaleContainer(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {}, func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -219,7 +220,7 @@ func TestContainerStartCreateError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {}, func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from start")
 	}
@@ -229,7 +230,7 @@ func TestContainerStartCreateError(t *testing.T) {
 }
 
 func TestContainerStartAlreadyRunning(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {}, func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("first start: %v", err)
 	}
@@ -241,7 +242,7 @@ func TestContainerStartAlreadyRunning(t *testing.T) {
 }
 
 func TestContainerStopWhenStopped(t *testing.T) {
-	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, &mockAPI{}, "", func() {}, func() {})
 	if err := c.Stop(); err != nil {
 		t.Fatalf("stop when already stopped: %v", err)
 	}
@@ -331,7 +332,7 @@ func TestContainerStartPullError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {}, func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from pull failure")
 	}
@@ -347,7 +348,7 @@ func TestContainerStartImageCheckError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {}, func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from image check failure")
 	}
@@ -368,7 +369,7 @@ func TestContainerStartContainerStartError(t *testing.T) {
 		},
 	}
 
-	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {})
+	c := NewContainer("web", config.Service{Image: "nginx"}, mock, "", func() {}, func() {})
 	if err := c.Start(); err == nil {
 		t.Fatal("expected error from container start failure")
 	}
@@ -393,7 +394,7 @@ func TestContainerStartWithEnv(t *testing.T) {
 		Image: "nginx",
 		Env:   map[string]string{"NODE_ENV": "production", "PORT": "3000"},
 	}
-	c := NewContainer("web", svc, mock, "", func() {})
+	c := NewContainer("web", svc, mock, "", func() {}, func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -440,7 +441,7 @@ func TestContainerExecHealthCheck(t *testing.T) {
 			default:
 			}
 		}
-	})
+	}, func() {})
 
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
@@ -501,7 +502,7 @@ func TestContainerStartWithVolumes(t *testing.T) {
 		Volumes: []string{"./data:/var/lib/postgresql/data"},
 		Ports:   []string{"5432:5432"},
 	}
-	c := NewContainer("db", svc, mock, "", func() {})
+	c := NewContainer("db", svc, mock, "", func() {}, func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -516,5 +517,102 @@ func TestContainerStartWithVolumes(t *testing.T) {
 	}
 	if len(gotCfg.Ports) != 1 || gotCfg.Ports[0].Host != 5432 {
 		t.Errorf("ports = %+v, want [{5432 5432 }]", gotCfg.Ports)
+	}
+}
+
+func TestContainerOnCrashCalledOnHealthyToCrash(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	c := NewContainer("db", config.Service{Image: "postgres"}, nil, "", func() {}, onCrash)
+
+	c.mu.Lock()
+	c.state = runner.StateRunning
+	c.healthy = true
+	c.mu.Unlock()
+
+	c.mu.Lock()
+	c.healthy = false
+	c.mu.Unlock()
+	c.onCrash()
+
+	if crashCount != 1 {
+		t.Errorf("onCrash should fire once on healthy→crash; got %d", crashCount)
+	}
+}
+
+func TestContainerOnCrashCalledOnNeverHealthyExit(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	c := NewContainer("db", config.Service{Image: "postgres"}, nil, "", func() {}, onCrash)
+
+	c.mu.Lock()
+	c.state = runner.StateRunning
+	c.healthy = false
+	c.manuallyStopped = false
+	c.mu.Unlock()
+
+	c.mu.Lock()
+	shouldNotify := !c.healthy && !c.manuallyStopped && c.state == runner.StateRunning
+	if c.state == runner.StateRunning {
+		c.state = runner.StateFailed
+		c.healthy = false
+	}
+	c.mu.Unlock()
+	if shouldNotify {
+		c.onCrash()
+	}
+
+	if crashCount != 1 {
+		t.Errorf("onCrash should fire on never-healthy exit; got %d", crashCount)
+	}
+}
+
+func TestContainerOnCrashNotCalledOnManualStop(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	c := NewContainer("db", config.Service{Image: "postgres"}, nil, "", func() {}, onCrash)
+
+	c.mu.Lock()
+	c.state = runner.StateRunning
+	c.healthy = false
+	c.manuallyStopped = true
+	c.mu.Unlock()
+
+	c.mu.Lock()
+	shouldNotify := !c.healthy && !c.manuallyStopped && c.state == runner.StateRunning
+	if c.state == runner.StateRunning {
+		c.state = runner.StateFailed
+		c.healthy = false
+	}
+	c.mu.Unlock()
+	if shouldNotify {
+		c.onCrash()
+	}
+
+	if crashCount != 0 {
+		t.Errorf("onCrash should NOT fire on manual stop; got %d", crashCount)
+	}
+}
+
+func TestContainerOnCrashNotCalledOnHealthyStop(t *testing.T) {
+	var crashCount int
+	onCrash := func() { crashCount++ }
+	c := NewContainer("db", config.Service{Image: "postgres"}, nil, "", func() {}, onCrash)
+
+	c.mu.Lock()
+	c.state = runner.StateRunning
+	c.healthy = true
+	c.manuallyStopped = true
+	c.mu.Unlock()
+
+	c.mu.Lock()
+	shouldNotify := !c.healthy && !c.manuallyStopped && c.state == runner.StateRunning
+	c.mu.Unlock()
+	if shouldNotify {
+		c.onCrash()
+	}
+
+	if crashCount != 0 {
+		t.Errorf("onCrash should NOT fire on healthy manual stop; got %d", crashCount)
 	}
 }
