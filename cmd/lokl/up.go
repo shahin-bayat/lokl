@@ -79,12 +79,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	runners := make(map[string]supervisor.ProcessRunner)
-	pf := func(name string, svc config.Service, onChange func()) supervisor.ProcessRunner {
+	pf := func(name string, svc config.Service, onChange func(), onCrash func()) supervisor.ProcessRunner {
 		var r supervisor.ProcessRunner
 		if svc.Image != "" {
-			r = docker.NewContainer(name, svc, dockerClient, projectNetwork, onChange)
+			r = docker.NewContainer(name, svc, dockerClient, projectNetwork, onChange, onCrash)
 		} else {
-			r = process.New(name, svc, onChange)
+			r = process.New(name, svc, onChange, onCrash)
 		}
 		runners[name] = r
 		return r
