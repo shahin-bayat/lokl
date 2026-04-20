@@ -3,6 +3,8 @@ package tui
 import (
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
+
 	"github.com/shahin-bayat/lokl/internal/types"
 )
 
@@ -33,14 +35,23 @@ type Model struct {
 	quitting    bool
 	copyMsg     string
 	copyExpiry  time.Time
+	showSearch  bool
+	searchQuery string
+	searchInput textinput.Model
 }
 
 func newModel(ctrl ServiceController) Model {
+	ti := textinput.New()
+	ti.Placeholder = "search logs..."
+	ti.CharLimit = 256
+	ti.Width = 76
+
 	m := Model{
-		controller: ctrl,
-		events:     ctrl.Subscribe(),
-		width:      80,
-		height:     24,
+		controller:  ctrl,
+		events:      ctrl.Subscribe(),
+		width:       80,
+		height:      24,
+		searchInput: ti,
 	}
 	m.refreshServices()
 	return m

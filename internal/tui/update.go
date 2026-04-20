@@ -43,6 +43,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.searchInput.Width = max(0, msg.Width-4)
 		return m, nil
 
 	case eventMsg:
@@ -66,6 +67,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Intercept before normal handlers so search input captures j/k/q/etc.
+	if m.showSearch {
+		switch msg.String() {
+		case "esc":
+			m.showSearch = false
+			m.searchQuery = ""
+			m.searchInput.SetValue("")
+			m.searchInput.Blur()
+			return m, nil
+		case "enter":
+			m.showSearch = false
+			m.searchInput.Blur()
+			return m, nil
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		}
+		prev := m.searchQuery
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		m.searchQuery = m.searchInput.Value()
+		if m.searchQuery != prev {
+			m.logOffset = 0
+		}
+		return m, cmd
+	}
+
 	if m.showHelp {
 		switch msg.String() {
 		case "?", "esc", "q":
@@ -146,7 +174,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "c":
 		if svc := m.selectedService(); svc != nil {
-			logs := m.controller.ServiceLogs(svc.Name)
+			logs := filterLogs(m.controller.ServiceLogs(svc.Name), m.searchQuery)
 			if err := copyToClipboard(logs); err != nil {
 				m.copyMsg = "Copy failed"
 			} else {
@@ -154,6 +182,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.copyExpiry = time.Now().Add(copyFlashDuration)
 			return m, copyFlashTimeout()
+		}
+
+	case "/":
+		if m.showLogs {
+			m.showSearch = true
+			m.searchInput.Focus()
+			return m, nil
 		}
 
 	case "esc":
