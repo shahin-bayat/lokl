@@ -109,7 +109,7 @@ func (c *Container) Start() error {
 	// masked directories (vendor/, node_modules/) survive container recreation.
 	// Anonymous volumes would be deleted by RemoveContainer(RemoveVolumes=true).
 	for _, p := range anonPaths {
-		volumes = append(volumes, namedMaskVolume(c.name, p)+":"+p)
+		volumes = append(volumes, namedMaskVolume(c.network, c.name, p)+":"+p)
 	}
 
 	ports, err := parsePorts(c.config.Ports)
@@ -315,10 +315,33 @@ func parseHealthParams(h *config.HealthConfig) (interval, timeout time.Duration,
 // namedMaskVolume returns a deterministic Docker volume name for a masked
 // container path. Using a named volume (rather than an anonymous one) keeps
 // dependencies like vendor/ or node_modules/ around across container
-// recreation. Docker volume names must match [a-zA-Z0-9][a-zA-Z0-9_.-]+.
-func namedMaskVolume(serviceName, containerPath string) string {
-	safe := strings.Trim(strings.ReplaceAll(containerPath, "/", "-"), "-")
-	return fmt.Sprintf("lokl-mask-%s-%s", serviceName, safe)
+// recreation. The project-scoped network name is baked into the prefix so
+// two projects with identically named services don't collide on the global
+// Docker volume namespace. Docker volume names must match
+// [a-zA-Z0-9][a-zA-Z0-9_.-]+, so any other character is replaced with '-'.
+func namedMaskVolume(network, serviceName, containerPath string) string {
+	prefix := "lokl-mask"
+	if network != "" {
+		prefix = network + "-mask"
+	}
+	return fmt.Sprintf("%s-%s-%s", prefix, sanitizeVolumeName(serviceName), sanitizeVolumeName(containerPath))
+}
+
+func sanitizeVolumeName(s string) string {
+	mapped := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return r
+		case r == '_', r == '.', r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, s)
+	for strings.Contains(mapped, "--") {
+		mapped = strings.ReplaceAll(mapped, "--", "-")
+	}
+	return strings.Trim(mapped, "-")
 }
 
 func buildExecCmd(s config.StringOrSlice) []string {

@@ -740,23 +740,37 @@ func TestContainerMaskVolumes(t *testing.T) {
 			"/var/www/html/node_modules",
 		},
 	}
-	c := NewContainer("web", svc, mock, "", func() {}, func() {})
+	c := NewContainer("web", svc, mock, "lokl-demo", func() {}, func() {})
 	if err := c.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	defer func() { _ = c.Stop() }()
 
-	// Expect 3 binds: 1 host-mapped + 2 named mask volumes.
+	// Expect 3 binds: 1 host-mapped + 2 project-scoped named mask volumes.
 	if len(gotCfg.Volumes) != 3 {
 		t.Fatalf("binds count = %d, want 3 (%v)", len(gotCfg.Volumes), gotCfg.Volumes)
 	}
 	wantMask := []string{
-		"lokl-mask-web-var-www-html-vendor:/var/www/html/vendor",
-		"lokl-mask-web-var-www-html-node_modules:/var/www/html/node_modules",
+		"lokl-demo-mask-web-var-www-html-vendor:/var/www/html/vendor",
+		"lokl-demo-mask-web-var-www-html-node_modules:/var/www/html/node_modules",
 	}
 	for _, w := range wantMask {
 		if !slices.Contains(gotCfg.Volumes, w) {
 			t.Errorf("missing mask bind %q; got %v", w, gotCfg.Volumes)
 		}
+	}
+}
+
+func TestNamedMaskVolumeSanitize(t *testing.T) {
+	got := namedMaskVolume("lokl-demo", "web", "/app/node_modules/@types")
+	want := "lokl-demo-mask-web-app-node_modules-types"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// Empty network → no project prefix
+	got = namedMaskVolume("", "web", "/data")
+	want = "lokl-mask-web-data"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
