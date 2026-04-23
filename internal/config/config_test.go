@@ -100,6 +100,16 @@ func TestValidate(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name:    "empty command string",
+			cfg:     Config{Name: "test", Services: map[string]Service{"a": {Command: cmdStr("")}}},
+			wantErr: "command must not be empty",
+		},
+		{
+			name:    "empty command list",
+			cfg:     Config{Name: "test", Services: map[string]Service{"a": {Command: cmdArgs("")}}},
+			wantErr: "command must not be empty",
+		},
+		{
 			name: "subdomain without proxy domain",
 			cfg: Config{
 				Name:     "test",

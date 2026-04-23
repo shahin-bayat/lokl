@@ -78,6 +78,10 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		return fmt.Errorf("service %q: command or image is required", name)
 	}
 
+	if hasCommand && strings.TrimSpace(svc.Command.Args[0]) == "" {
+		return fmt.Errorf("service %q: command must not be empty", name)
+	}
+
 	if svc.Subdomain != "" && svc.Port == 0 {
 		return fmt.Errorf("service %q: port is required when subdomain is set", name)
 	}
