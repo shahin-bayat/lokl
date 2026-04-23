@@ -652,3 +652,73 @@ func TestContainerOnCrashNotCalledOnHealthyManualStop(t *testing.T) {
 		t.Errorf("onCrash should NOT fire on healthy manual stop; got %d", crashCount)
 	}
 }
+
+func TestContainerCommandOverride_Shell(t *testing.T) {
+	var gotCfg ContainerConfig
+	m := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "cid", nil
+		},
+	}
+	svc := config.Service{
+		Image:   "node:20",
+		Command: config.StringOrSlice{Args: []string{"npm run dev"}, Shell: true},
+	}
+	c := NewContainer("web", svc, m, "", func() {}, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	want := []string{"sh", "-c", "npm run dev"}
+	if !slices.Equal(gotCfg.Cmd, want) {
+		t.Errorf("Cmd = %v, want %v", gotCfg.Cmd, want)
+	}
+}
+
+func TestContainerCommandOverride_Exec(t *testing.T) {
+	var gotCfg ContainerConfig
+	m := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "cid", nil
+		},
+	}
+	svc := config.Service{
+		Image:   "node:20",
+		Command: config.StringOrSlice{Args: []string{"npm", "run", "dev"}, Shell: false},
+	}
+	c := NewContainer("web", svc, m, "", func() {}, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	want := []string{"npm", "run", "dev"}
+	if !slices.Equal(gotCfg.Cmd, want) {
+		t.Errorf("Cmd = %v, want %v", gotCfg.Cmd, want)
+	}
+}
+
+func TestContainerCommandOverride_Unset(t *testing.T) {
+	var gotCfg ContainerConfig
+	m := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "cid", nil
+		},
+	}
+	svc := config.Service{
+		Image: "node:20",
+	}
+	c := NewContainer("web", svc, m, "", func() {}, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	if gotCfg.Cmd != nil {
+		t.Errorf("Cmd = %v, want nil (image default)", gotCfg.Cmd)
+	}
+}
