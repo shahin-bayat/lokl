@@ -101,10 +101,13 @@ func (p *Process) Start() error {
 	p.cmd.Env = p.buildEnv()
 
 	// Resolve exec-form Args[0] against the service's PATH, since exec.Command
-	// only consulted the parent PATH before cmd.Env was set.
+	// only consulted the parent PATH before cmd.Env was set. Relative PATH
+	// entries are resolved against the service's working directory so that
+	// `./node_modules/.bin` works with `path: ./frontend`.
 	if !p.config.Command.Shell {
-		resolved, err := lookPathWithEnv(p.config.Command.Args[0], p.cmd.Env)
+		resolved, err := lookPathWithEnv(p.config.Command.Args[0], p.cmd.Env, p.cmd.Dir)
 		if err != nil {
+			p.state = runner.StateFailed
 			return fmt.Errorf("process %s: %w", p.name, err)
 		}
 		p.cmd.Path = resolved
@@ -233,7 +236,7 @@ func (p *Process) Stop() error {
 	return nil
 }
 
-func lookPathWithEnv(name string, env []string) (string, error) {
+func lookPathWithEnv(name string, env []string, cwd string) (string, error) {
 	if strings.ContainsRune(name, '/') {
 		return name, nil
 	}
@@ -249,6 +252,9 @@ func lookPathWithEnv(name string, env []string) (string, error) {
 	for _, dir := range filepath.SplitList(pathVar) {
 		if dir == "" {
 			dir = "."
+		}
+		if !filepath.IsAbs(dir) && cwd != "" {
+			dir = filepath.Join(cwd, dir)
 		}
 		candidate := filepath.Join(dir, name)
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {

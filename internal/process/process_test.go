@@ -238,7 +238,7 @@ func TestLookPathWithEnv(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	got, err := lookPathWithEnv("mycli", []string{"PATH=" + dir})
+	got, err := lookPathWithEnv("mycli", []string{"PATH=" + dir}, "")
 	if err != nil {
 		t.Fatalf("lookPathWithEnv: %v", err)
 	}
@@ -246,11 +246,45 @@ func TestLookPathWithEnv(t *testing.T) {
 		t.Errorf("got %q, want %q", got, bin)
 	}
 
-	if _, err := lookPathWithEnv("mycli", []string{"PATH=/nowhere"}); err == nil {
+	if _, err := lookPathWithEnv("mycli", []string{"PATH=/nowhere"}, ""); err == nil {
 		t.Errorf("expected not-found error for missing PATH entry")
 	}
 
-	if got, _ := lookPathWithEnv("/usr/bin/absolute", []string{"PATH=/x"}); got != "/usr/bin/absolute" {
+	if got, _ := lookPathWithEnv("/usr/bin/absolute", []string{"PATH=/x"}, ""); got != "/usr/bin/absolute" {
 		t.Errorf("absolute path should pass through, got %q", got)
+	}
+}
+
+func TestLookPathWithEnvRelativeToCwd(t *testing.T) {
+	cwd := t.TempDir()
+	nodeModulesBin := cwd + "/node_modules/.bin"
+	if err := os.MkdirAll(nodeModulesBin, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	bin := nodeModulesBin + "/vite"
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	got, err := lookPathWithEnv("vite", []string{"PATH=./node_modules/.bin"}, cwd)
+	if err != nil {
+		t.Fatalf("lookPathWithEnv: %v", err)
+	}
+	if got != bin {
+		t.Errorf("got %q, want %q", got, bin)
+	}
+}
+
+func TestProcessExecFormMissingBinary(t *testing.T) {
+	p := New("bad", config.Service{Command: execCmd("definitely-not-a-real-binary-xyz")}, func() {}, func() {})
+	err := p.Start()
+	if err == nil {
+		t.Fatalf("expected error for missing binary")
+	}
+	p.mu.Lock()
+	st := p.state
+	p.mu.Unlock()
+	if st != runner.StateFailed {
+		t.Errorf("state = %v, want StateFailed", st)
 	}
 }
