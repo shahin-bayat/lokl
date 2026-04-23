@@ -100,7 +100,7 @@ func (c *Container) Start() error {
 		}
 	}
 
-	volumes, err := absVolumes(c.config.Volumes)
+	volumes, anonVolumes, err := splitVolumes(c.config.Volumes)
 	if err != nil {
 		c.setFailed()
 		return fmt.Errorf("container %s: %w", c.name, err)
@@ -120,14 +120,15 @@ func (c *Container) Start() error {
 	}
 
 	cfg := ContainerConfig{
-		Name:           containerName,
-		Image:          c.config.Image,
-		Env:            c.config.Env,
-		Ports:          ports,
-		Volumes:        volumes,
-		Labels:         map[string]string{containerLabel: c.name},
-		Network:        c.network,
-		NetworkAliases: []string{c.name},
+		Name:             containerName,
+		Image:            c.config.Image,
+		Env:              c.config.Env,
+		Ports:            ports,
+		Volumes:          volumes,
+		AnonymousVolumes: anonVolumes,
+		Labels:           map[string]string{containerLabel: c.name},
+		Network:          c.network,
+		NetworkAliases:   []string{c.name},
 	}
 	if c.config.Command.IsSet() {
 		cfg.Cmd = buildExecCmd(c.config.Command)
@@ -330,33 +331,37 @@ func expandHealthCmd(s config.StringOrSlice, env map[string]string) config.Strin
 	return config.StringOrSlice{Args: expanded, Shell: s.Shell}
 }
 
-// absVolumes resolves relative host paths in volume mappings to absolute paths
-// and pre-creates the host directory if it doesn't exist.
-// Docker requires absolute host paths; Docker Desktop won't auto-create missing dirs.
+// splitVolumes separates bind/named mounts from anonymous volumes (bare container paths).
+// Bind mount host paths are resolved to absolute and the directory is pre-created (Docker
+// requires absolute host paths; Docker Desktop won't auto-create missing dirs).
 // Named volumes (e.g. "pgdata:/var/lib/...") are passed through unchanged.
-func absVolumes(raw []string) ([]string, error) {
-	out := make([]string, len(raw))
-	for i, v := range raw {
+// Anonymous volumes ("/container/path") let Docker create an unnamed volume that masks
+// a directory from an outer bind mount (e.g. vendor/ on top of a source bind).
+func splitVolumes(raw []string) (binds []string, anon []string, err error) {
+	binds = make([]string, 0, len(raw))
+	for _, v := range raw {
 		host, rest, ok := strings.Cut(v, ":")
-		if ok && (strings.HasPrefix(host, "/") || strings.HasPrefix(host, ".")) {
-			// Bind mount: resolve to absolute and pre-create directory if needed.
+		if !ok {
+			anon = append(anon, v)
+			continue
+		}
+		if strings.HasPrefix(host, "/") || strings.HasPrefix(host, ".") {
 			if !filepath.IsAbs(host) {
-				if abs, err := filepath.Abs(host); err == nil {
+				if abs, absErr := filepath.Abs(host); absErr == nil {
 					host = abs
 				}
 			}
-			// Skip MkdirAll if the path already exists as a file (file bind-mount).
 			if info, statErr := os.Lstat(host); os.IsNotExist(statErr) || (statErr == nil && info.IsDir()) {
-				if err := os.MkdirAll(host, 0o755); err != nil {
-					return nil, fmt.Errorf("creating volume directory %q: %w", host, err)
+				if mkErr := os.MkdirAll(host, 0o755); mkErr != nil {
+					return nil, nil, fmt.Errorf("creating volume directory %q: %w", host, mkErr)
 				}
 			}
-			out[i] = host + ":" + rest
-		} else {
-			out[i] = v
+			binds = append(binds, host+":"+rest)
+			continue
 		}
+		binds = append(binds, v)
 	}
-	return out, nil
+	return binds, anon, nil
 }
 
 func parsePorts(raw []string) ([]PortMapping, error) {

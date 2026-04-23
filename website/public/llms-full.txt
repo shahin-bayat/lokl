@@ -240,7 +240,7 @@ services:
 | `port` | int | Host port for proxy routing and health checks |
 | `env` | map | Environment variables |
 | `env_file` | list | Paths to `.env` files to load |
-| `volumes` | list | Volume mounts (`host:container`) |
+| `volumes` | list | Volume mounts. `host:container` bind, `name:container` named, or bare `/container/path` anonymous (masks dir from outer bind, e.g. `vendor/`, `node_modules/`). |
 | `subdomain` | string | Subdomain for proxy routing |
 | `depends_on` | list | Services to start first |
 | `health` | object | Health check configuration |

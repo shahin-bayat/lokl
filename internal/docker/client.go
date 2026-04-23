@@ -131,6 +131,14 @@ func (c *Client) CreateContainer(ctx context.Context, cfg ContainerConfig) (stri
 		}
 	}
 
+	var anonVolumes map[string]struct{}
+	if len(cfg.AnonymousVolumes) > 0 {
+		anonVolumes = make(map[string]struct{}, len(cfg.AnonymousVolumes))
+		for _, p := range cfg.AnonymousVolumes {
+			anonVolumes[p] = struct{}{}
+		}
+	}
+
 	resp, err := c.api.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: cfg.Name,
 		Config: &container.Config{
@@ -139,6 +147,7 @@ func (c *Client) CreateContainer(ctx context.Context, cfg ContainerConfig) (stri
 			Env:          env,
 			Labels:       labels,
 			ExposedPorts: exposedPorts,
+			Volumes:      anonVolumes,
 		},
 		HostConfig: &container.HostConfig{
 			Binds:        cfg.Volumes,

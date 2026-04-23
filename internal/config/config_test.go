@@ -191,7 +191,15 @@ func TestValidate(t *testing.T) {
 				Name:     "test",
 				Services: map[string]Service{"a": {Image: "nginx", Volumes: []string{"bad"}}},
 			},
-			wantErr: "invalid volume",
+			wantErr: "container path must be absolute",
+		},
+		{
+			name: "docker: anonymous volume accepted",
+			cfg: Config{
+				Name:     "test",
+				Services: map[string]Service{"a": {Image: "nginx", Volumes: []string{"/var/www/html/vendor"}}},
+			},
+			wantErr: "",
 		},
 		{
 			name: "docker: volume relative container path",

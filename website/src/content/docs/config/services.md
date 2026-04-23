@@ -58,7 +58,7 @@ services:
 | `port` | int | Host port for proxy routing and health checks |
 | `env` | map | Environment variables |
 | `env_file` | list | Paths to `.env` files to load |
-| `volumes` | list | Volume mounts (`host:container`) |
+| `volumes` | list | Volume mounts. `host:container` for bind mounts, `name:container` for named volumes, bare `/container/path` for anonymous volumes (mask a dir from an outer bind mount). |
 | `subdomain` | string | Subdomain for proxy routing |
 | `depends_on` | list | Services to start first |
 | `health` | object | Health check configuration (see below) |
@@ -68,6 +68,7 @@ services:
 :::note
 - When `port` is set with `ports`, the port value must appear as a host port in one of the mappings.
 - Volume container paths must be absolute (e.g., `/var/lib/data`, not `data`).
+- Anonymous volumes (bare container path, e.g. `- /var/www/html/vendor`) let Docker mask a directory from an outer bind mount — useful for `vendor/` or `node_modules/` inside a source bind.
 - Docker must be running to use container-based services.
 :::
 

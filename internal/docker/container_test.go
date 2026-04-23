@@ -722,3 +722,35 @@ func TestContainerCommandOverride_Unset(t *testing.T) {
 		t.Errorf("Cmd = %v, want nil (image default)", gotCfg.Cmd)
 	}
 }
+
+func TestContainerAnonymousVolumes(t *testing.T) {
+	var gotCfg ContainerConfig
+	mock := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "test-id", nil
+		},
+	}
+
+	svc := config.Service{
+		Image: "node:20",
+		Volumes: []string{
+			"./app:/var/www/html",
+			"/var/www/html/vendor",
+			"/var/www/html/node_modules",
+		},
+	}
+	c := NewContainer("web", svc, mock, "", func() {}, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	if len(gotCfg.Volumes) != 1 {
+		t.Errorf("binds count = %d, want 1", len(gotCfg.Volumes))
+	}
+	wantAnon := []string{"/var/www/html/vendor", "/var/www/html/node_modules"}
+	if !slices.Equal(gotCfg.AnonymousVolumes, wantAnon) {
+		t.Errorf("AnonymousVolumes = %v, want %v", gotCfg.AnonymousVolumes, wantAnon)
+	}
+}

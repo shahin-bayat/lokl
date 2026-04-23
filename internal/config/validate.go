@@ -157,8 +157,14 @@ func validateDockerService(name string, svc *Service) error {
 	}
 
 	for _, raw := range svc.Volumes {
+		if !strings.Contains(raw, ":") {
+			if !strings.HasPrefix(raw, "/") {
+				return fmt.Errorf("service %q: invalid volume %q: container path must be absolute", name, raw)
+			}
+			continue
+		}
 		parts := strings.SplitN(raw, ":", 2)
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		if parts[0] == "" || parts[1] == "" {
 			return fmt.Errorf("service %q: invalid volume %q: expected host:container format", name, raw)
 		}
 		if !strings.HasPrefix(parts[1], "/") {
