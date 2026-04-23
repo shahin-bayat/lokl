@@ -127,6 +127,8 @@ services:
 
 **Requirement for shell form:** the image must contain `/bin/sh` (most do; `scratch` and some distroless images do not).
 
+**Signal handling:** with shell form, `/bin/sh` is PID 1. `docker stop` sends `SIGTERM` to `sh`, which may not forward it to the child — the container waits out the stop grace period before `SIGKILL`. Use the list form for fast graceful shutdown on a single binary.
+
 ### Exec check (`health.command`)
 
 For data services that have no HTTP endpoint (databases, caches):

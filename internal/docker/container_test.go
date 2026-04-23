@@ -470,7 +470,7 @@ func TestBuildExecCmd(t *testing.T) {
 		{
 			name:  "string form — sh -c wrap",
 			input: config.StringOrSlice{Args: []string{"pg_isready", "-U", "postgres"}, Shell: true},
-			want:  []string{"sh", "-c", "exec pg_isready -U postgres"},
+			want:  []string{"sh", "-c", "pg_isready -U postgres"},
 		},
 		{
 			name:  "single-element array — exec verbatim",
@@ -671,7 +671,7 @@ func TestContainerCommandOverride_Shell(t *testing.T) {
 	}
 	defer func() { _ = c.Stop() }()
 
-	want := []string{"sh", "-c", "exec npm run dev"}
+	want := []string{"sh", "-c", "npm run dev"}
 	if !slices.Equal(gotCfg.Cmd, want) {
 		t.Errorf("Cmd = %v, want %v", gotCfg.Cmd, want)
 	}
