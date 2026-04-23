@@ -108,6 +108,20 @@ services:
 
 `health.path` and `health.command` are mutually exclusive. Use `health.command` for data services (databases, caches) that have no HTTP endpoint. String form wraps in `sh -c`; array form execs directly.
 
+Container command can be overridden: set `command:` together with `image:`. String form wraps `sh -c` inside the container; array form execs directly. Image `ENTRYPOINT` is preserved (matches Docker Compose and `docker run image cmd...`).
+
+```yaml
+services:
+  api:
+    image: node:20
+    command: "npm run dev"          # overrides image CMD
+  worker:
+    image: node:20
+    command: ["node", "worker.js"]  # exec form, no shell
+```
+
+**Caveat:** images with an `ENTRYPOINT` (e.g. `python`, `node`, `postgres`) prepend it to the command. Shell-form `command: "script.py"` on a `python` image becomes `python /bin/sh -c "script.py"` — use the list form or a custom image when this matters.
+
 Containers in the same lokl project share a bridge network (`lokl-{name}`). Reach other containers by service name (e.g., `DB_HOST: db`).
 
 ## CLI commands

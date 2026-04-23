@@ -235,6 +235,7 @@ services:
 | Field | Type | Description |
 |-------|------|-------------|
 | `image` | string | Docker image |
+| `command` | string or list | Shell command (string → `sh -c`) or exec args (list). Allowed with `image` to override the image's default command. |
 | `ports` | list | Port mappings (`host:container`) |
 | `port` | int | Host port for proxy routing and health checks |
 | `env` | map | Environment variables |
@@ -299,6 +300,24 @@ services:
 ```
 
 `health.path` and `health.command` are mutually exclusive — use one or the other.
+
+#### Overriding a container's command
+
+`command` is allowed alongside `image`. It overrides the image's default `CMD` while preserving `ENTRYPOINT` — matching `docker run image cmd...` and Docker Compose's `command:` field.
+
+```yaml
+services:
+  api:
+    image: node:20
+    command: "npm run dev"          # string → sh -c inside the container
+  worker:
+    image: node:20
+    command: ["node", "worker.js"]  # list → direct exec, no shell
+```
+
+**Caveat:** images with an `ENTRYPOINT` (e.g. `python`, `node`, `postgres`) prepend it to the command. Shell-form `command: "script.py"` on a `python` image becomes `python /bin/sh -c "script.py"` — use the list form or a custom image when this matters.
+
+**Requirement for shell form:** the image must contain `/bin/sh` (most do; `scratch` and some distroless images do not).
 
 #### Container Networking
 
