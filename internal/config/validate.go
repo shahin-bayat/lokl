@@ -71,14 +71,19 @@ func checkDuplicatePorts(services map[string]Service) error {
 }
 
 func validateService(name string, svc *Service, services map[string]Service) error {
-	hasCommand := svc.Command != ""
+	hasCommand := svc.Command.IsSet()
 	hasImage := svc.Image != ""
 
 	if !hasCommand && !hasImage {
 		return fmt.Errorf("service %q: command or image is required", name)
 	}
-	if hasCommand && hasImage {
-		return fmt.Errorf("service %q: cannot specify both command and image", name)
+
+	if hasCommand && strings.TrimSpace(svc.Command.Args[0]) == "" {
+		return fmt.Errorf("service %q: command must not be empty", name)
+	}
+
+	if hasImage && svc.Path != "" {
+		return fmt.Errorf("service %q: path is only valid for command-based services; container services cannot set path", name)
 	}
 
 	if svc.Subdomain != "" && svc.Port == 0 {
@@ -156,8 +161,14 @@ func validateDockerService(name string, svc *Service) error {
 	}
 
 	for _, raw := range svc.Volumes {
+		if !strings.Contains(raw, ":") {
+			if !strings.HasPrefix(raw, "/") {
+				return fmt.Errorf("service %q: invalid volume %q: container path must be absolute", name, raw)
+			}
+			continue
+		}
 		parts := strings.SplitN(raw, ":", 2)
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		if parts[0] == "" || parts[1] == "" {
 			return fmt.Errorf("service %q: invalid volume %q: expected host:container format", name, raw)
 		}
 		if !strings.HasPrefix(parts[1], "/") {

@@ -24,9 +24,9 @@ type ProxyConfig struct {
 }
 
 type Service struct {
-	Command string `yaml:"command"`
-	Image   string `yaml:"image"`
-	Path    string `yaml:"path"`
+	Command StringOrSlice `yaml:"command"`
+	Image   string        `yaml:"image"`
+	Path    string        `yaml:"path"`
 
 	Port      int    `yaml:"port"`
 	Subdomain string `yaml:"subdomain"`
@@ -72,7 +72,7 @@ func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
 		s.Shell = false
 		return value.Decode(&s.Args)
 	default:
-		return fmt.Errorf("health.command: expected string or sequence, got %v", value.Tag)
+		return fmt.Errorf("expected string or sequence, got %v", value.Tag)
 	}
 	return nil
 }

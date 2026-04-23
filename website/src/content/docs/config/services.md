@@ -21,7 +21,7 @@ services:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `command` | string | Shell command to run |
+| `command` | string or list | Shell command (string → `sh -c`) or exec args (list). Allowed with `image` to override the image's default command. |
 | `path` | string | Working directory (relative to config) |
 | `port` | int | Port the service listens on |
 | `env` | map | Environment variables |
@@ -53,11 +53,12 @@ services:
 | Field | Type | Description |
 |-------|------|-------------|
 | `image` | string | Docker image |
+| `command` | string or list | Override the image's default `CMD`. String → `sh -c` inside container; list → direct exec. |
 | `ports` | list | Port mappings (`host:container`) |
 | `port` | int | Host port for proxy routing and health checks |
 | `env` | map | Environment variables |
 | `env_file` | list | Paths to `.env` files to load |
-| `volumes` | list | Volume mounts (`host:container`) |
+| `volumes` | list | Volume mounts. `host:container` for bind mounts, `name:container` for named volumes, bare `/container/path` for anonymous volumes (mask a dir from an outer bind mount). |
 | `subdomain` | string | Subdomain for proxy routing |
 | `depends_on` | list | Services to start first |
 | `health` | object | Health check configuration (see below) |
@@ -67,6 +68,7 @@ services:
 :::note
 - When `port` is set with `ports`, the port value must appear as a host port in one of the mappings.
 - Volume container paths must be absolute (e.g., `/var/lib/data`, not `data`).
+- "Mask" volumes (bare container path, e.g. `- /var/www/html/vendor`) hide a directory from an outer bind mount — useful for `vendor/` or `node_modules/` inside a source bind. lokl backs these with deterministically-named Docker volumes — `lokl-<project>-mask-<service>-<escaped-path>` when a project network is in use, falling back to `lokl-mask-<service>-<escaped-path>` otherwise — so the contents survive container recreation. Remove manually via `docker volume rm` when you want to reset.
 - Docker must be running to use container-based services.
 :::
 
@@ -106,6 +108,26 @@ services:
       timeout: 5s
       retries: 3
 ```
+
+### Overriding a container's command
+
+`command` is allowed alongside `image`. It overrides the image's default `CMD` while preserving `ENTRYPOINT` — matching `docker run image cmd...` and Docker Compose's `command:` field.
+
+```yaml
+services:
+  api:
+    image: node:20
+    command: "npm run dev"          # string → sh -c inside the container
+  worker:
+    image: node:20
+    command: ["node", "worker.js"]  # list → direct exec, no shell
+```
+
+**Caveat:** images with an `ENTRYPOINT` (e.g. `python`, `node`, `postgres`) prepend it to the command. Shell-form `command: "script.py"` on a `python` image becomes `python /bin/sh -c "script.py"` — use the list form or a custom image when this matters.
+
+**Requirement for shell form:** the image must contain `/bin/sh` (most do; `scratch` and some distroless images do not).
+
+**Signal handling:** with shell form, `/bin/sh` is PID 1. `docker stop` sends `SIGTERM` to `sh`, which may not forward it to the child — the container waits out the stop grace period before `SIGKILL`. Use the list form for fast graceful shutdown on a single binary.
 
 ### Exec check (`health.command`)
 

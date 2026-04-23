@@ -652,3 +652,125 @@ func TestContainerOnCrashNotCalledOnHealthyManualStop(t *testing.T) {
 		t.Errorf("onCrash should NOT fire on healthy manual stop; got %d", crashCount)
 	}
 }
+
+func TestContainerCommandOverride_Shell(t *testing.T) {
+	var gotCfg ContainerConfig
+	m := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "cid", nil
+		},
+	}
+	svc := config.Service{
+		Image:   "node:20",
+		Command: config.StringOrSlice{Args: []string{"npm run dev"}, Shell: true},
+	}
+	c := NewContainer("web", svc, m, "", func() {}, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	want := []string{"sh", "-c", "npm run dev"}
+	if !slices.Equal(gotCfg.Cmd, want) {
+		t.Errorf("Cmd = %v, want %v", gotCfg.Cmd, want)
+	}
+}
+
+func TestContainerCommandOverride_Exec(t *testing.T) {
+	var gotCfg ContainerConfig
+	m := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "cid", nil
+		},
+	}
+	svc := config.Service{
+		Image:   "node:20",
+		Command: config.StringOrSlice{Args: []string{"npm", "run", "dev"}, Shell: false},
+	}
+	c := NewContainer("web", svc, m, "", func() {}, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	want := []string{"npm", "run", "dev"}
+	if !slices.Equal(gotCfg.Cmd, want) {
+		t.Errorf("Cmd = %v, want %v", gotCfg.Cmd, want)
+	}
+}
+
+func TestContainerCommandOverride_Unset(t *testing.T) {
+	var gotCfg ContainerConfig
+	m := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "cid", nil
+		},
+	}
+	svc := config.Service{
+		Image: "node:20",
+	}
+	c := NewContainer("web", svc, m, "", func() {}, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	if gotCfg.Cmd != nil {
+		t.Errorf("Cmd = %v, want nil (image default)", gotCfg.Cmd)
+	}
+}
+
+func TestContainerMaskVolumes(t *testing.T) {
+	var gotCfg ContainerConfig
+	mock := &mockAPI{
+		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
+			gotCfg = cfg
+			return "test-id", nil
+		},
+	}
+
+	svc := config.Service{
+		Image: "node:20",
+		Volumes: []string{
+			"./app:/var/www/html",
+			"/var/www/html/vendor",
+			"/var/www/html/node_modules",
+		},
+	}
+	c := NewContainer("web", svc, mock, "lokl-demo", func() {}, func() {})
+	if err := c.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = c.Stop() }()
+
+	// Expect 3 binds: 1 host-mapped + 2 project-scoped named mask volumes.
+	if len(gotCfg.Volumes) != 3 {
+		t.Fatalf("binds count = %d, want 3 (%v)", len(gotCfg.Volumes), gotCfg.Volumes)
+	}
+	wantMask := []string{
+		"lokl-demo-mask-web-var-www-html-vendor:/var/www/html/vendor",
+		"lokl-demo-mask-web-var-www-html-node_modules:/var/www/html/node_modules",
+	}
+	for _, w := range wantMask {
+		if !slices.Contains(gotCfg.Volumes, w) {
+			t.Errorf("missing mask bind %q; got %v", w, gotCfg.Volumes)
+		}
+	}
+}
+
+func TestNamedMaskVolumeSanitize(t *testing.T) {
+	got := namedMaskVolume("lokl-demo", "web", "/app/node_modules/@types")
+	want := "lokl-demo-mask-web-app-node_modules-types"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// Empty network → no project prefix
+	got = namedMaskVolume("", "web", "/data")
+	want = "lokl-mask-web-data"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

@@ -8,9 +8,10 @@ import (
 type ContainerConfig struct {
 	Name           string
 	Image          string
+	Cmd            []string
 	Env            map[string]string
 	Ports          []PortMapping
-	Volumes        []string
+	Volumes        []string // bind mounts (host:container) and named volumes (name:container)
 	Labels         map[string]string
 	Network        string   // "lokl-{project}"; empty = default bridge
 	NetworkAliases []string // DNS aliases inside the project network (e.g. service name)

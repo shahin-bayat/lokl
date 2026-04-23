@@ -128,6 +128,15 @@ services:
     image: redis:7
 ```
 
+### Override a container's command
+
+```yaml
+services:
+  web:
+    image: node:20
+    command: "npm run dev"  # overrides image CMD, keeps ENTRYPOINT
+```
+
 Then:
 - `https://app.myproject.dev` → frontend (port 5173)
 - `https://api.myproject.dev` → api (port 3000)

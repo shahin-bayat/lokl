@@ -135,6 +135,7 @@ func (c *Client) CreateContainer(ctx context.Context, cfg ContainerConfig) (stri
 		Name: cfg.Name,
 		Config: &container.Config{
 			Image:        cfg.Image,
+			Cmd:          cfg.Cmd,
 			Env:          env,
 			Labels:       labels,
 			ExposedPorts: exposedPorts,

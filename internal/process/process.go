@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -85,7 +87,11 @@ func (p *Process) Start() error {
 
 	// exec replaces the shell so there's one process to manage, not sh + child.
 	// Setpgid isolates the process tree for clean group-kill on shutdown.
-	p.cmd = exec.Command("sh", "-c", "exec "+p.config.Command)
+	if p.config.Command.Shell {
+		p.cmd = exec.Command("sh", "-c", "exec "+strings.Join(p.config.Command.Args, " "))
+	} else {
+		p.cmd = exec.Command(p.config.Command.Args[0], p.config.Command.Args[1:]...)
+	}
 	p.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if p.config.Path != "" {
@@ -93,6 +99,20 @@ func (p *Process) Start() error {
 	}
 
 	p.cmd.Env = p.buildEnv()
+
+	// Resolve exec-form Args[0] against the service's PATH, since exec.Command
+	// only consulted the parent PATH before cmd.Env was set. Relative PATH
+	// entries are resolved against the service's working directory so that
+	// `./node_modules/.bin` works with `path: ./frontend`.
+	if !p.config.Command.Shell {
+		resolved, err := lookPathWithEnv(p.config.Command.Args[0], p.cmd.Env, p.cmd.Dir)
+		if err != nil {
+			p.state = runner.StateFailed
+			return fmt.Errorf("process %s: %w", p.name, err)
+		}
+		p.cmd.Path = resolved
+		p.cmd.Err = nil
+	}
 
 	p.logs = runner.NewLogs(maxLogLines)
 
@@ -214,6 +234,39 @@ func (p *Process) Stop() error {
 	p.onChange()
 
 	return nil
+}
+
+func lookPathWithEnv(name string, env []string, cwd string) (string, error) {
+	if strings.ContainsRune(name, '/') {
+		return name, nil
+	}
+	var pathVar string
+	for _, e := range env {
+		if rest, ok := strings.CutPrefix(e, "PATH="); ok {
+			pathVar = rest
+		}
+	}
+	if pathVar == "" {
+		return exec.LookPath(name)
+	}
+	for _, dir := range filepath.SplitList(pathVar) {
+		if dir == "" {
+			dir = "."
+		}
+		if !filepath.IsAbs(dir) && cwd != "" {
+			dir = filepath.Join(cwd, dir)
+		}
+		candidate := filepath.Join(dir, name)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			// Return an absolute path so the child doesn't re-resolve it
+			// relative to cmd.Dir (which would double-prefix).
+			if abs, absErr := filepath.Abs(candidate); absErr == nil {
+				candidate = abs
+			}
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("executable %q not found in PATH", name)
 }
 
 func (p *Process) buildEnv() []string {

@@ -100,10 +100,16 @@ func (c *Container) Start() error {
 		}
 	}
 
-	volumes, err := absVolumes(c.config.Volumes)
+	volumes, anonPaths, err := splitVolumes(c.config.Volumes)
 	if err != nil {
 		c.setFailed()
 		return fmt.Errorf("container %s: %w", c.name, err)
+	}
+	// Convert bare container paths into deterministically-named volumes so
+	// masked directories (vendor/, node_modules/) survive container recreation.
+	// Anonymous volumes would be deleted by RemoveContainer(RemoveVolumes=true).
+	for _, p := range anonPaths {
+		volumes = append(volumes, namedMaskVolume(c.network, c.name, p)+":"+p)
 	}
 
 	ports, err := parsePorts(c.config.Ports)
@@ -128,6 +134,9 @@ func (c *Container) Start() error {
 		Labels:         map[string]string{containerLabel: c.name},
 		Network:        c.network,
 		NetworkAliases: []string{c.name},
+	}
+	if c.config.Command.IsSet() {
+		cfg.Cmd = buildExecCmd(c.config.Command)
 	}
 
 	id, err := c.api.CreateContainer(ctx, cfg)
@@ -303,8 +312,43 @@ func parseHealthParams(h *config.HealthConfig) (interval, timeout time.Duration,
 	return
 }
 
+// namedMaskVolume returns a deterministic Docker volume name for a masked
+// container path. Using a named volume (rather than an anonymous one) keeps
+// dependencies like vendor/ or node_modules/ around across container
+// recreation. The project-scoped network name is baked into the prefix so
+// two projects with identically named services don't collide on the global
+// Docker volume namespace. Docker volume names must match
+// [a-zA-Z0-9][a-zA-Z0-9_.-]+, so any other character is replaced with '-'.
+func namedMaskVolume(network, serviceName, containerPath string) string {
+	prefix := "lokl-mask"
+	if network != "" {
+		prefix = network + "-mask"
+	}
+	return fmt.Sprintf("%s-%s-%s", prefix, sanitizeVolumeName(serviceName), sanitizeVolumeName(containerPath))
+}
+
+func sanitizeVolumeName(s string) string {
+	mapped := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return r
+		case r == '_', r == '.', r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, s)
+	for strings.Contains(mapped, "--") {
+		mapped = strings.ReplaceAll(mapped, "--", "-")
+	}
+	return strings.Trim(mapped, "-")
+}
+
 func buildExecCmd(s config.StringOrSlice) []string {
 	if s.Shell {
+		// No `exec` wrapping here: it would break compound expressions like
+		// `a && b` or `a || exit 1` (used by health.command). Callers that
+		// want the app as PID 1 for signal handling should use the list form.
 		return []string{"sh", "-c", strings.Join(s.Args, " ")}
 	}
 	return s.Args
@@ -327,33 +371,37 @@ func expandHealthCmd(s config.StringOrSlice, env map[string]string) config.Strin
 	return config.StringOrSlice{Args: expanded, Shell: s.Shell}
 }
 
-// absVolumes resolves relative host paths in volume mappings to absolute paths
-// and pre-creates the host directory if it doesn't exist.
-// Docker requires absolute host paths; Docker Desktop won't auto-create missing dirs.
+// splitVolumes separates bind/named mounts from anonymous volumes (bare container paths).
+// Bind mount host paths are resolved to absolute and the directory is pre-created (Docker
+// requires absolute host paths; Docker Desktop won't auto-create missing dirs).
 // Named volumes (e.g. "pgdata:/var/lib/...") are passed through unchanged.
-func absVolumes(raw []string) ([]string, error) {
-	out := make([]string, len(raw))
-	for i, v := range raw {
+// Anonymous volumes ("/container/path") let Docker create an unnamed volume that masks
+// a directory from an outer bind mount (e.g. vendor/ on top of a source bind).
+func splitVolumes(raw []string) (binds []string, anon []string, err error) {
+	binds = make([]string, 0, len(raw))
+	for _, v := range raw {
 		host, rest, ok := strings.Cut(v, ":")
-		if ok && (strings.HasPrefix(host, "/") || strings.HasPrefix(host, ".")) {
-			// Bind mount: resolve to absolute and pre-create directory if needed.
+		if !ok {
+			anon = append(anon, v)
+			continue
+		}
+		if strings.HasPrefix(host, "/") || strings.HasPrefix(host, ".") {
 			if !filepath.IsAbs(host) {
-				if abs, err := filepath.Abs(host); err == nil {
+				if abs, absErr := filepath.Abs(host); absErr == nil {
 					host = abs
 				}
 			}
-			// Skip MkdirAll if the path already exists as a file (file bind-mount).
 			if info, statErr := os.Lstat(host); os.IsNotExist(statErr) || (statErr == nil && info.IsDir()) {
-				if err := os.MkdirAll(host, 0o755); err != nil {
-					return nil, fmt.Errorf("creating volume directory %q: %w", host, err)
+				if mkErr := os.MkdirAll(host, 0o755); mkErr != nil {
+					return nil, nil, fmt.Errorf("creating volume directory %q: %w", host, mkErr)
 				}
 			}
-			out[i] = host + ":" + rest
-		} else {
-			out[i] = v
+			binds = append(binds, host+":"+rest)
+			continue
 		}
+		binds = append(binds, v)
 	}
-	return out, nil
+	return binds, anon, nil
 }
 
 func parsePorts(raw []string) ([]PortMapping, error) {
