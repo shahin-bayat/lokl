@@ -85,7 +85,11 @@ func (p *Process) Start() error {
 
 	// exec replaces the shell so there's one process to manage, not sh + child.
 	// Setpgid isolates the process tree for clean group-kill on shutdown.
-	p.cmd = exec.Command("sh", "-c", "exec "+p.config.Command)
+	if p.config.Command.Shell {
+		p.cmd = exec.Command("sh", "-c", "exec "+p.config.Command.Args[0])
+	} else {
+		p.cmd = exec.Command(p.config.Command.Args[0], p.config.Command.Args[1:]...)
+	}
 	p.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if p.config.Path != "" {

@@ -71,14 +71,11 @@ func checkDuplicatePorts(services map[string]Service) error {
 }
 
 func validateService(name string, svc *Service, services map[string]Service) error {
-	hasCommand := svc.Command != ""
+	hasCommand := svc.Command.IsSet()
 	hasImage := svc.Image != ""
 
 	if !hasCommand && !hasImage {
 		return fmt.Errorf("service %q: command or image is required", name)
-	}
-	if hasCommand && hasImage {
-		return fmt.Errorf("service %q: cannot specify both command and image", name)
 	}
 
 	if svc.Subdomain != "" && svc.Port == 0 {

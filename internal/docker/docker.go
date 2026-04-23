@@ -8,6 +8,7 @@ import (
 type ContainerConfig struct {
 	Name           string
 	Image          string
+	Cmd            []string
 	Env            map[string]string
 	Ports          []PortMapping
 	Volumes        []string

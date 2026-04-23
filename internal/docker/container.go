@@ -129,6 +129,9 @@ func (c *Container) Start() error {
 		Network:        c.network,
 		NetworkAliases: []string{c.name},
 	}
+	if c.config.Command.IsSet() {
+		cfg.Cmd = buildExecCmd(c.config.Command)
+	}
 
 	id, err := c.api.CreateContainer(ctx, cfg)
 	if err != nil {

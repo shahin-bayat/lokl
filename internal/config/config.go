@@ -24,9 +24,9 @@ type ProxyConfig struct {
 }
 
 type Service struct {
-	Command string `yaml:"command"`
-	Image   string `yaml:"image"`
-	Path    string `yaml:"path"`
+	Command StringOrSlice `yaml:"command"`
+	Image   string        `yaml:"image"`
+	Path    string        `yaml:"path"`
 
 	Port      int    `yaml:"port"`
 	Subdomain string `yaml:"subdomain"`
