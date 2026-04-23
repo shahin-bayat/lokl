@@ -723,7 +723,7 @@ func TestContainerCommandOverride_Unset(t *testing.T) {
 	}
 }
 
-func TestContainerAnonymousVolumes(t *testing.T) {
+func TestContainerMaskVolumes(t *testing.T) {
 	var gotCfg ContainerConfig
 	mock := &mockAPI{
 		CreateContainerFn: func(_ context.Context, cfg ContainerConfig) (string, error) {
@@ -746,11 +746,17 @@ func TestContainerAnonymousVolumes(t *testing.T) {
 	}
 	defer func() { _ = c.Stop() }()
 
-	if len(gotCfg.Volumes) != 1 {
-		t.Errorf("binds count = %d, want 1", len(gotCfg.Volumes))
+	// Expect 3 binds: 1 host-mapped + 2 named mask volumes.
+	if len(gotCfg.Volumes) != 3 {
+		t.Fatalf("binds count = %d, want 3 (%v)", len(gotCfg.Volumes), gotCfg.Volumes)
 	}
-	wantAnon := []string{"/var/www/html/vendor", "/var/www/html/node_modules"}
-	if !slices.Equal(gotCfg.AnonymousVolumes, wantAnon) {
-		t.Errorf("AnonymousVolumes = %v, want %v", gotCfg.AnonymousVolumes, wantAnon)
+	wantMask := []string{
+		"lokl-mask-web-var-www-html-vendor:/var/www/html/vendor",
+		"lokl-mask-web-var-www-html-node_modules:/var/www/html/node_modules",
+	}
+	for _, w := range wantMask {
+		if !slices.Contains(gotCfg.Volumes, w) {
+			t.Errorf("missing mask bind %q; got %v", w, gotCfg.Volumes)
+		}
 	}
 }

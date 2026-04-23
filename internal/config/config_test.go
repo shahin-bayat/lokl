@@ -110,6 +110,11 @@ func TestValidate(t *testing.T) {
 			wantErr: "command must not be empty",
 		},
 		{
+			name:    "path not allowed with image",
+			cfg:     Config{Name: "test", Services: map[string]Service{"a": {Image: "node:20", Path: "./frontend"}}},
+			wantErr: "path is only valid for command-based services",
+		},
+		{
 			name: "subdomain without proxy domain",
 			cfg: Config{
 				Name:     "test",

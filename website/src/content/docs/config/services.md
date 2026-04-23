@@ -68,7 +68,7 @@ services:
 :::note
 - When `port` is set with `ports`, the port value must appear as a host port in one of the mappings.
 - Volume container paths must be absolute (e.g., `/var/lib/data`, not `data`).
-- Anonymous volumes (bare container path, e.g. `- /var/www/html/vendor`) let Docker mask a directory from an outer bind mount — useful for `vendor/` or `node_modules/` inside a source bind.
+- "Mask" volumes (bare container path, e.g. `- /var/www/html/vendor`) hide a directory from an outer bind mount — useful for `vendor/` or `node_modules/` inside a source bind. lokl backs these with deterministically-named Docker volumes (`lokl-mask-<service>-<escaped-path>`) so the contents survive container recreation. Remove manually via `docker volume rm` when you want to reset.
 - Docker must be running to use container-based services.
 :::
 

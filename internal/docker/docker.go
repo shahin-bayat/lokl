@@ -6,16 +6,15 @@ import (
 )
 
 type ContainerConfig struct {
-	Name             string
-	Image            string
-	Cmd              []string
-	Env              map[string]string
-	Ports            []PortMapping
-	Volumes          []string // bind mounts (host:container) and named volumes (name:container)
-	AnonymousVolumes []string // container paths; Docker creates anonymous volumes to mask bind-mount paths
-	Labels           map[string]string
-	Network          string   // "lokl-{project}"; empty = default bridge
-	NetworkAliases   []string // DNS aliases inside the project network (e.g. service name)
+	Name           string
+	Image          string
+	Cmd            []string
+	Env            map[string]string
+	Ports          []PortMapping
+	Volumes        []string // bind mounts (host:container) and named volumes (name:container)
+	Labels         map[string]string
+	Network        string   // "lokl-{project}"; empty = default bridge
+	NetworkAliases []string // DNS aliases inside the project network (e.g. service name)
 }
 
 type PortMapping struct {

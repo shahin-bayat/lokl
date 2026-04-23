@@ -82,6 +82,10 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		return fmt.Errorf("service %q: command must not be empty", name)
 	}
 
+	if hasImage && svc.Path != "" {
+		return fmt.Errorf("service %q: path is only valid for command-based services; container services cannot set path", name)
+	}
+
 	if svc.Subdomain != "" && svc.Port == 0 {
 		return fmt.Errorf("service %q: port is required when subdomain is set", name)
 	}

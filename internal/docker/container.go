@@ -100,10 +100,16 @@ func (c *Container) Start() error {
 		}
 	}
 
-	volumes, anonVolumes, err := splitVolumes(c.config.Volumes)
+	volumes, anonPaths, err := splitVolumes(c.config.Volumes)
 	if err != nil {
 		c.setFailed()
 		return fmt.Errorf("container %s: %w", c.name, err)
+	}
+	// Convert bare container paths into deterministically-named volumes so
+	// masked directories (vendor/, node_modules/) survive container recreation.
+	// Anonymous volumes would be deleted by RemoveContainer(RemoveVolumes=true).
+	for _, p := range anonPaths {
+		volumes = append(volumes, namedMaskVolume(c.name, p)+":"+p)
 	}
 
 	ports, err := parsePorts(c.config.Ports)
@@ -120,15 +126,14 @@ func (c *Container) Start() error {
 	}
 
 	cfg := ContainerConfig{
-		Name:             containerName,
-		Image:            c.config.Image,
-		Env:              c.config.Env,
-		Ports:            ports,
-		Volumes:          volumes,
-		AnonymousVolumes: anonVolumes,
-		Labels:           map[string]string{containerLabel: c.name},
-		Network:          c.network,
-		NetworkAliases:   []string{c.name},
+		Name:           containerName,
+		Image:          c.config.Image,
+		Env:            c.config.Env,
+		Ports:          ports,
+		Volumes:        volumes,
+		Labels:         map[string]string{containerLabel: c.name},
+		Network:        c.network,
+		NetworkAliases: []string{c.name},
 	}
 	if c.config.Command.IsSet() {
 		cfg.Cmd = buildExecCmd(c.config.Command)
@@ -305,6 +310,15 @@ func parseHealthParams(h *config.HealthConfig) (interval, timeout time.Duration,
 		retries = *h.Retries
 	}
 	return
+}
+
+// namedMaskVolume returns a deterministic Docker volume name for a masked
+// container path. Using a named volume (rather than an anonymous one) keeps
+// dependencies like vendor/ or node_modules/ around across container
+// recreation. Docker volume names must match [a-zA-Z0-9][a-zA-Z0-9_.-]+.
+func namedMaskVolume(serviceName, containerPath string) string {
+	safe := strings.Trim(strings.ReplaceAll(containerPath, "/", "-"), "-")
+	return fmt.Sprintf("lokl-mask-%s-%s", serviceName, safe)
 }
 
 func buildExecCmd(s config.StringOrSlice) []string {
