@@ -3,6 +3,7 @@ package process
 import (
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -272,6 +273,37 @@ func TestLookPathWithEnvRelativeToCwd(t *testing.T) {
 	}
 	if got != bin {
 		t.Errorf("got %q, want %q", got, bin)
+	}
+}
+
+func TestLookPathWithEnvReturnsAbsolute(t *testing.T) {
+	root := t.TempDir()
+	sub := root + "/frontend/node_modules/.bin"
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	bin := sub + "/vite"
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// Simulate a relative cwd like `./frontend`: if the helper returned a
+	// relative path, cmd.Dir would re-resolve it and look in frontend/frontend.
+	oldWd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	got, err := lookPathWithEnv("vite", []string{"PATH=./node_modules/.bin"}, "./frontend")
+	if err != nil {
+		t.Fatalf("lookPathWithEnv: %v", err)
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("got %q, want absolute path", got)
+	}
+	if !strings.HasSuffix(got, "/frontend/node_modules/.bin/vite") {
+		t.Errorf("got %q, want suffix /frontend/node_modules/.bin/vite", got)
 	}
 }
 

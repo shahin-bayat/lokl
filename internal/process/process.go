@@ -258,6 +258,11 @@ func lookPathWithEnv(name string, env []string, cwd string) (string, error) {
 		}
 		candidate := filepath.Join(dir, name)
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			// Return an absolute path so the child doesn't re-resolve it
+			// relative to cmd.Dir (which would double-prefix).
+			if abs, absErr := filepath.Abs(candidate); absErr == nil {
+				candidate = abs
+			}
 			return candidate, nil
 		}
 	}
