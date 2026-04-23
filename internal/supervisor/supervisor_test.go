@@ -150,6 +150,10 @@ func (m *mockProxy) IsServiceProxyEnabled(name string) bool {
 
 // --- Helpers ---
 
+func shCmd(s string) config.StringOrSlice {
+	return config.StringOrSlice{Args: []string{s}, Shell: true}
+}
+
 func newTestSupervisor(cfg *config.Config, factory ProcessFactory, proxy ProxyManager) *Supervisor {
 	if proxy == nil {
 		proxy = &mockProxy{}
@@ -184,7 +188,7 @@ func TestStartService(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, factory, nil)
 
@@ -204,7 +208,7 @@ func TestStartServiceIdempotent(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, factory, nil)
 
@@ -234,7 +238,7 @@ func TestStartServiceStartError(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, factory, nil)
 
@@ -255,7 +259,7 @@ func TestStopService(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, factory, nil)
 
@@ -273,7 +277,7 @@ func TestStopService(t *testing.T) {
 
 func TestStopServiceNotRunning(t *testing.T) {
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, nil, nil)
 
@@ -292,7 +296,7 @@ func TestRestartService(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, factory, nil)
 
@@ -316,8 +320,8 @@ func TestStart(t *testing.T) {
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
-		"db":  {Command: "postgres"},
-		"web": {Command: "npm start", DependsOn: []string{"db"}},
+		"db":  {Command: shCmd("postgres")},
+		"web": {Command: shCmd("npm start"), DependsOn: []string{"db"}},
 	})
 
 	proxy := &mockProxy{
@@ -346,8 +350,8 @@ func TestStartSkipsAutoStartFalse(t *testing.T) {
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
-		"web":    {Command: "npm start"},
-		"worker": {Command: "worker", AutoStart: boolPtr(false)},
+		"web":    {Command: shCmd("npm start")},
+		"worker": {Command: shCmd("worker"), AutoStart: boolPtr(false)},
 	})
 
 	proxy := &mockProxy{
@@ -386,8 +390,8 @@ func TestStartServiceFailureTriggersCleanup(t *testing.T) {
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
-		"db":  {Command: "postgres"},
-		"web": {Command: "npm start", DependsOn: []string{"db"}},
+		"db":  {Command: shCmd("postgres")},
+		"web": {Command: shCmd("npm start"), DependsOn: []string{"db"}},
 	})
 
 	proxy := &mockProxy{
@@ -413,7 +417,7 @@ func TestStartNoProxy(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, factory, nil)
 
@@ -436,7 +440,7 @@ func TestStop(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, factory, proxy)
 
@@ -461,7 +465,7 @@ func TestToggleProxy(t *testing.T) {
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
-		"web": {Command: "npm start", Subdomain: "app"},
+		"web": {Command: shCmd("npm start"), Subdomain: "app"},
 	})
 	s := newTestSupervisor(cfg, nil, proxy)
 
@@ -501,7 +505,7 @@ func TestToggleProxyNoRoute(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, nil, proxy)
 
@@ -524,8 +528,8 @@ func TestServices(t *testing.T) {
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
-		"web": {Command: "npm start", Port: 3000, Subdomain: "app"},
-		"api": {Command: "go run .", Port: 8080, Subdomain: "api"},
+		"web": {Command: shCmd("npm start"), Port: 3000, Subdomain: "app"},
+		"api": {Command: shCmd("go run ."), Port: 8080, Subdomain: "api"},
 	})
 	s := newTestSupervisor(cfg, factory, proxy)
 
@@ -561,7 +565,7 @@ func TestServicesWithPathPrefix(t *testing.T) {
 
 	cfg := proxyConfig(map[string]config.Service{
 		"web": {
-			Command:   "npm start",
+			Command:   shCmd("npm start"),
 			Port:      3000,
 			Subdomain: "app",
 			Rewrite:   &config.RewriteConfig{StripPrefix: "web"},
@@ -583,7 +587,7 @@ func TestServiceLogs(t *testing.T) {
 	}
 
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, factory, nil)
 
@@ -596,7 +600,7 @@ func TestServiceLogs(t *testing.T) {
 
 func TestServiceLogsNotRunning(t *testing.T) {
 	cfg := simpleConfig(map[string]config.Service{
-		"web": {Command: "npm start"},
+		"web": {Command: shCmd("npm start")},
 	})
 	s := newTestSupervisor(cfg, nil, nil)
 
