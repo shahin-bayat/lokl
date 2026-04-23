@@ -78,7 +78,7 @@ func TestValidate(t *testing.T) {
 	}{
 		{
 			name:    "missing name",
-			cfg:     Config{Services: map[string]Service{"a": {Command: "x"}}},
+			cfg:     Config{Services: map[string]Service{"a": {Command: cmdStr("x")}}},
 			wantErr: "name is required",
 		},
 		{
@@ -95,18 +95,15 @@ func TestValidate(t *testing.T) {
 			wantErr: "command or image is required",
 		},
 		{
-			name: "both command and image",
-			cfg: Config{
-				Name:     "test",
-				Services: map[string]Service{"a": {Command: "x", Image: "y"}},
-			},
-			wantErr: "cannot specify both command and image",
+			name:    "command overrides image command",
+			cfg:     Config{Name: "test", Services: map[string]Service{"a": {Command: cmdStr("npm run dev"), Image: "node:20"}}},
+			wantErr: "",
 		},
 		{
 			name: "subdomain without proxy domain",
 			cfg: Config{
 				Name:     "test",
-				Services: map[string]Service{"a": {Command: "x", Subdomain: "app", Port: 3000}},
+				Services: map[string]Service{"a": {Command: cmdStr("x"), Subdomain: "app", Port: 3000}},
 			},
 			wantErr: "has subdomain but proxy.domain is not configured",
 		},
@@ -115,7 +112,7 @@ func TestValidate(t *testing.T) {
 			cfg: Config{
 				Name:     "test",
 				Proxy:    ProxyConfig{Domain: "test.dev"},
-				Services: map[string]Service{"a": {Command: "x", Subdomain: "app"}},
+				Services: map[string]Service{"a": {Command: cmdStr("x"), Subdomain: "app"}},
 			},
 			wantErr: "port is required when subdomain is set",
 		},
@@ -123,7 +120,7 @@ func TestValidate(t *testing.T) {
 			name: "unknown dependency",
 			cfg: Config{
 				Name:     "test",
-				Services: map[string]Service{"a": {Command: "x", DependsOn: []string{"unknown"}}},
+				Services: map[string]Service{"a": {Command: cmdStr("x"), DependsOn: []string{"unknown"}}},
 			},
 			wantErr: "depends_on references unknown service",
 		},
@@ -131,7 +128,7 @@ func TestValidate(t *testing.T) {
 			name: "invalid ready_timeout",
 			cfg: Config{
 				Name:     "test",
-				Services: map[string]Service{"a": {Command: "x", ReadyTimeout: "bad"}},
+				Services: map[string]Service{"a": {Command: cmdStr("x"), ReadyTimeout: "bad"}},
 			},
 			wantErr: "invalid ready_timeout",
 		},
@@ -139,7 +136,7 @@ func TestValidate(t *testing.T) {
 			name: "invalid restart policy",
 			cfg: Config{
 				Name:     "test",
-				Services: map[string]Service{"a": {Command: "x", Restart: "bad"}},
+				Services: map[string]Service{"a": {Command: cmdStr("x"), Restart: "bad"}},
 			},
 			wantErr: "invalid restart policy",
 		},
@@ -147,7 +144,7 @@ func TestValidate(t *testing.T) {
 			name: "invalid health interval",
 			cfg: Config{
 				Name:     "test",
-				Services: map[string]Service{"a": {Command: "x", Health: &HealthConfig{Interval: "bad"}}},
+				Services: map[string]Service{"a": {Command: cmdStr("x"), Health: &HealthConfig{Interval: "bad"}}},
 			},
 			wantErr: "invalid health.interval",
 		},
@@ -156,8 +153,8 @@ func TestValidate(t *testing.T) {
 			cfg: Config{
 				Name: "test",
 				Services: map[string]Service{
-					"a": {Command: "x", Port: 3000},
-					"b": {Command: "y", Port: 3000},
+					"a": {Command: cmdStr("x"), Port: 3000},
+					"b": {Command: cmdStr("y"), Port: 3000},
 				},
 			},
 			wantErr: "both use port 3000",
@@ -207,7 +204,7 @@ func TestValidate(t *testing.T) {
 			cfg: Config{
 				Name: "test",
 				Services: map[string]Service{
-					"a": {Command: "x", Port: 8080},
+					"a": {Command: cmdStr("x"), Port: 8080},
 					"b": {Image: "nginx", Ports: []string{"8080:80"}},
 				},
 			},
@@ -227,8 +224,8 @@ func TestValidate(t *testing.T) {
 				Name:  "test",
 				Proxy: ProxyConfig{Domain: "test.dev"},
 				Services: map[string]Service{
-					"a": {Command: "x", Subdomain: "client", Port: 8080},
-					"b": {Command: "y", Subdomain: "client", Port: 8081},
+					"a": {Command: cmdStr("x"), Subdomain: "client", Port: 8080},
+					"b": {Command: cmdStr("y"), Subdomain: "client", Port: 8081},
 				},
 			},
 			wantErr: "same subdomain with no prefix",
@@ -239,8 +236,8 @@ func TestValidate(t *testing.T) {
 				Name:  "test",
 				Proxy: ProxyConfig{Domain: "test.dev"},
 				Services: map[string]Service{
-					"a": {Command: "x", Subdomain: "client", Port: 8080, Rewrite: &RewriteConfig{StripPrefix: "app-a"}},
-					"b": {Command: "y", Subdomain: "client", Port: 8081, Rewrite: &RewriteConfig{StripPrefix: "app-b"}},
+					"a": {Command: cmdStr("x"), Subdomain: "client", Port: 8080, Rewrite: &RewriteConfig{StripPrefix: "app-a"}},
+					"b": {Command: cmdStr("y"), Subdomain: "client", Port: 8081, Rewrite: &RewriteConfig{StripPrefix: "app-b"}},
 				},
 			},
 			wantErr: "",
@@ -249,7 +246,7 @@ func TestValidate(t *testing.T) {
 			name: "valid config",
 			cfg: Config{
 				Name:     "test",
-				Services: map[string]Service{"a": {Command: "x"}},
+				Services: map[string]Service{"a": {Command: cmdStr("x")}},
 			},
 			wantErr: "",
 		},
@@ -306,8 +303,8 @@ func TestLoadWithEnvFile(t *testing.T) {
 func TestApplyDefaults(t *testing.T) {
 	cfg := &Config{
 		Services: map[string]Service{
-			"a": {Command: "x"},
-			"b": {Command: "y", Health: &HealthConfig{Path: "/health"}},
+			"a": {Command: cmdStr("x")},
+			"b": {Command: cmdStr("y"), Health: &HealthConfig{Path: "/health"}},
 		},
 	}
 
@@ -466,5 +463,31 @@ services:
 	}
 	if !strings.Contains(err.Error(), "path") || !strings.Contains(err.Error(), "command") {
 		t.Errorf("error should mention both path and command, got: %v", err)
+	}
+}
+
+func TestServiceCommandParsing(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantArgs  []string
+		wantShell bool
+	}{
+		{"scalar", `command: "npm run dev"`, []string{"npm run dev"}, true},
+		{"sequence", `command: ["npm","run","dev"]`, []string{"npm", "run", "dev"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var s Service
+			if err := yaml.Unmarshal([]byte(tt.yaml), &s); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if !slices.Equal(s.Command.Args, tt.wantArgs) {
+				t.Errorf("args = %v, want %v", s.Command.Args, tt.wantArgs)
+			}
+			if s.Command.Shell != tt.wantShell {
+				t.Errorf("shell = %v, want %v", s.Command.Shell, tt.wantShell)
+			}
+		})
 	}
 }

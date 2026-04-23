@@ -81,7 +81,7 @@ func TestResolveEnv(t *testing.T) {
 			Name: "test",
 			Env:  map[string]string{"URL": "http://${TEST_HOST}:8080"},
 			Services: map[string]Service{
-				"api": {Command: "x", Env: map[string]string{"DSN": "postgres://$TEST_HOST/db"}},
+				"api": {Command: cmdStr("x"), Env: map[string]string{"DSN": "postgres://$TEST_HOST/db"}},
 			},
 		}
 
@@ -133,7 +133,7 @@ func TestResolveEnv(t *testing.T) {
 			Env:     map[string]string{"DB_USER": "admin"},
 			Services: map[string]Service{
 				"api": {
-					Command: "x",
+					Command: cmdStr("x"),
 					EnvFile: []string{"testdata/test.env"},
 					Env:     map[string]string{"DB_PASS": "override"},
 				},
@@ -157,7 +157,7 @@ func TestResolveEnv(t *testing.T) {
 			EnvFile: []string{"testdata/test.env"},
 			Services: map[string]Service{
 				"api": {
-					Command: "x",
+					Command: cmdStr("x"),
 					Env:     map[string]string{"DSN": "postgres://${DB_USER}:${DB_PASS}@localhost/db"},
 				},
 			},

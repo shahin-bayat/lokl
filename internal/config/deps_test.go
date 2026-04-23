@@ -15,8 +15,8 @@ func TestSortByDependency(t *testing.T) {
 		{
 			name: "no dependencies",
 			services: map[string]Service{
-				"a": {Command: "x"},
-				"b": {Command: "x"},
+				"a": {Command: cmdStr("x")},
+				"b": {Command: cmdStr("x")},
 			},
 			validate: func(order []string) bool {
 				return len(order) == 2
@@ -25,8 +25,8 @@ func TestSortByDependency(t *testing.T) {
 		{
 			name: "linear chain",
 			services: map[string]Service{
-				"api": {Command: "x", DependsOn: []string{"db"}},
-				"db":  {Command: "x"},
+				"api": {Command: cmdStr("x"), DependsOn: []string{"db"}},
+				"db":  {Command: cmdStr("x")},
 			},
 			validate: func(order []string) bool {
 				return indexOf(order, "db") < indexOf(order, "api")
@@ -35,9 +35,9 @@ func TestSortByDependency(t *testing.T) {
 		{
 			name: "multiple dependencies",
 			services: map[string]Service{
-				"api":   {Command: "x", DependsOn: []string{"db", "redis"}},
-				"db":    {Command: "x"},
-				"redis": {Command: "x"},
+				"api":   {Command: cmdStr("x"), DependsOn: []string{"db", "redis"}},
+				"db":    {Command: cmdStr("x")},
+				"redis": {Command: cmdStr("x")},
 			},
 			validate: func(order []string) bool {
 				apiIdx := indexOf(order, "api")
@@ -47,15 +47,15 @@ func TestSortByDependency(t *testing.T) {
 		{
 			name: "circular dependency",
 			services: map[string]Service{
-				"a": {Command: "x", DependsOn: []string{"b"}},
-				"b": {Command: "x", DependsOn: []string{"a"}},
+				"a": {Command: cmdStr("x"), DependsOn: []string{"b"}},
+				"b": {Command: cmdStr("x"), DependsOn: []string{"a"}},
 			},
 			wantErr: "circular dependency",
 		},
 		{
 			name: "unknown dependency",
 			services: map[string]Service{
-				"a": {Command: "x", DependsOn: []string{"unknown"}},
+				"a": {Command: cmdStr("x"), DependsOn: []string{"unknown"}},
 			},
 			wantErr: "unknown service",
 		},
