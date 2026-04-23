@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -97,6 +99,17 @@ func (p *Process) Start() error {
 	}
 
 	p.cmd.Env = p.buildEnv()
+
+	// Resolve exec-form Args[0] against the service's PATH, since exec.Command
+	// only consulted the parent PATH before cmd.Env was set.
+	if !p.config.Command.Shell {
+		resolved, err := lookPathWithEnv(p.config.Command.Args[0], p.cmd.Env)
+		if err != nil {
+			return fmt.Errorf("process %s: %w", p.name, err)
+		}
+		p.cmd.Path = resolved
+		p.cmd.Err = nil
+	}
 
 	p.logs = runner.NewLogs(maxLogLines)
 
@@ -218,6 +231,31 @@ func (p *Process) Stop() error {
 	p.onChange()
 
 	return nil
+}
+
+func lookPathWithEnv(name string, env []string) (string, error) {
+	if strings.ContainsRune(name, '/') {
+		return name, nil
+	}
+	var pathVar string
+	for _, e := range env {
+		if rest, ok := strings.CutPrefix(e, "PATH="); ok {
+			pathVar = rest
+		}
+	}
+	if pathVar == "" {
+		return exec.LookPath(name)
+	}
+	for _, dir := range filepath.SplitList(pathVar) {
+		if dir == "" {
+			dir = "."
+		}
+		candidate := filepath.Join(dir, name)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("executable %q not found in PATH", name)
 }
 
 func (p *Process) buildEnv() []string {

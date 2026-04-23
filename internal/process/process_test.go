@@ -230,3 +230,27 @@ func TestProcessExecForm(t *testing.T) {
 	}
 	t.Errorf("expected 'hello-exec' in logs, got: %v", logs)
 }
+
+func TestLookPathWithEnv(t *testing.T) {
+	dir := t.TempDir()
+	bin := dir + "/mycli"
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho hi\n"), 0o755); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	got, err := lookPathWithEnv("mycli", []string{"PATH=" + dir})
+	if err != nil {
+		t.Fatalf("lookPathWithEnv: %v", err)
+	}
+	if got != bin {
+		t.Errorf("got %q, want %q", got, bin)
+	}
+
+	if _, err := lookPathWithEnv("mycli", []string{"PATH=/nowhere"}); err == nil {
+		t.Errorf("expected not-found error for missing PATH entry")
+	}
+
+	if got, _ := lookPathWithEnv("/usr/bin/absolute", []string{"PATH=/x"}); got != "/usr/bin/absolute" {
+		t.Errorf("absolute path should pass through, got %q", got)
+	}
+}

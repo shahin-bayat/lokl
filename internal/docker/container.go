@@ -309,7 +309,9 @@ func parseHealthParams(h *config.HealthConfig) (interval, timeout time.Duration,
 
 func buildExecCmd(s config.StringOrSlice) []string {
 	if s.Shell {
-		return []string{"sh", "-c", strings.Join(s.Args, " ")}
+		// `exec` replaces the shell so the real process becomes PID 1 and
+		// receives signals directly (otherwise `sh` swallows SIGTERM).
+		return []string{"sh", "-c", "exec " + strings.Join(s.Args, " ")}
 	}
 	return s.Args
 }
