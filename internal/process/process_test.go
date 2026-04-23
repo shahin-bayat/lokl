@@ -5,13 +5,22 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shahin-bayat/lokl/internal/config"
 	"github.com/shahin-bayat/lokl/internal/runner"
 )
 
+func shCmd(s string) config.StringOrSlice {
+	return config.StringOrSlice{Args: []string{s}, Shell: true}
+}
+
+func execCmd(args ...string) config.StringOrSlice {
+	return config.StringOrSlice{Args: args, Shell: false}
+}
+
 func TestNewProcess(t *testing.T) {
-	p := New("web", config.Service{Command: "npm start"}, func() {}, func() {})
+	p := New("web", config.Service{Command: shCmd("npm start")}, func() {}, func() {})
 	if p.IsRunning() {
 		t.Error("new process should not be running")
 	}
@@ -25,7 +34,7 @@ func TestNewProcess(t *testing.T) {
 
 func TestBuildEnv(t *testing.T) {
 	p := New("web", config.Service{
-		Command: "npm start",
+		Command: shCmd("npm start"),
 		Env:     map[string]string{"NODE_ENV": "production", "PORT": "3000"},
 	}, func() {}, func() {})
 
@@ -54,7 +63,7 @@ func TestBuildEnv(t *testing.T) {
 func TestOnCrashCalledOnHealthyToCrash(t *testing.T) {
 	var crashCount int
 	onCrash := func() { crashCount++ }
-	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+	p := New("web", config.Service{Command: shCmd("npm start")}, func() {}, onCrash)
 
 	p.mu.Lock()
 	p.state = runner.StateRunning
@@ -78,7 +87,7 @@ func TestOnCrashCalledOnHealthyToCrash(t *testing.T) {
 func TestOnCrashCalledOnNeverHealthyExit(t *testing.T) {
 	var crashCount int
 	onCrash := func() { crashCount++ }
-	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+	p := New("web", config.Service{Command: shCmd("npm start")}, func() {}, onCrash)
 
 	p.mu.Lock()
 	p.state = runner.StateRunning
@@ -104,7 +113,7 @@ func TestOnCrashCalledOnNeverHealthyExit(t *testing.T) {
 func TestOnCrashCalledOnHealthyProcessExit(t *testing.T) {
 	var crashCount int
 	onCrash := func() { crashCount++ }
-	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+	p := New("web", config.Service{Command: shCmd("npm start")}, func() {}, onCrash)
 
 	// Simulate: process was healthy (e.g. no health check) and crashes.
 	p.mu.Lock()
@@ -131,7 +140,7 @@ func TestOnCrashCalledOnHealthyProcessExit(t *testing.T) {
 func TestOnCrashNotCalledOnManualStop(t *testing.T) {
 	var crashCount int
 	onCrash := func() { crashCount++ }
-	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+	p := New("web", config.Service{Command: shCmd("npm start")}, func() {}, onCrash)
 
 	p.mu.Lock()
 	p.state = runner.StateRunning
@@ -156,7 +165,7 @@ func TestOnCrashNotCalledOnManualStop(t *testing.T) {
 func TestOnCrashNotCalledOnHealthyManualStop(t *testing.T) {
 	var crashCount int
 	onCrash := func() { crashCount++ }
-	p := New("web", config.Service{Command: "npm start"}, func() {}, onCrash)
+	p := New("web", config.Service{Command: shCmd("npm start")}, func() {}, onCrash)
 
 	p.mu.Lock()
 	p.state = runner.StateRunning
@@ -193,4 +202,31 @@ func TestCheckPortFree(t *testing.T) {
 	if err := checkPortFree(port); err == nil {
 		t.Errorf("port %d should be occupied", port)
 	}
+}
+
+func TestProcessExecForm(t *testing.T) {
+	p := New("echo", config.Service{Command: execCmd("/bin/echo", "hello-exec")}, func() {}, func() {})
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		p.mu.Lock()
+		st := p.state
+		p.mu.Unlock()
+		if st != runner.StateRunning && st != runner.StateStarting {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	logs := p.Logs()
+	for _, line := range logs {
+		if strings.Contains(line, "hello-exec") {
+			return
+		}
+	}
+	t.Errorf("expected 'hello-exec' in logs, got: %v", logs)
 }
