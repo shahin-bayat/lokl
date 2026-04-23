@@ -72,7 +72,7 @@ func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
 		s.Shell = false
 		return value.Decode(&s.Args)
 	default:
-		return fmt.Errorf("command: expected string or sequence, got %v", value.Tag)
+		return fmt.Errorf("expected string or sequence, got %v", value.Tag)
 	}
 	return nil
 }
