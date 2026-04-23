@@ -12,6 +12,7 @@ import (
 	"github.com/shahin-bayat/lokl/internal/runner"
 )
 
+//nolint:unparam // fixture helper; kept for symmetry with execCmd
 func shCmd(s string) config.StringOrSlice {
 	return config.StringOrSlice{Args: []string{s}, Shell: true}
 }
