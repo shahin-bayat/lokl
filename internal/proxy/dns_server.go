@@ -15,23 +15,30 @@ const (
 )
 
 type dnsServer struct {
-	addr     string
-	parents  []string
-	conn     *net.UDPConn
-	srv      *dns.Server
-	mu       sync.Mutex
-	errCh    chan error
-	closeErr sync.Once
+	addr    string
+	parents []string
+	conn    *net.UDPConn
+	srv     *dns.Server
+	mu      sync.Mutex
+	errCh   chan error
+	done    chan struct{}
 }
 
 func newDNSServer(addr string, parents []string) (*dnsServer, error) {
 	if len(parents) == 0 {
 		return nil, fmt.Errorf("dns server requires at least one wildcard parent")
 	}
-	return &dnsServer{addr: addr, parents: parents, errCh: make(chan error, 1)}, nil
+	return &dnsServer{
+		addr:    addr,
+		parents: parents,
+		errCh:   make(chan error, 1),
+		done:    make(chan struct{}),
+	}, nil
 }
 
-func (s *dnsServer) Start() error {
+func (s *dnsServer) Start() error { return s.startNotify(nil) }
+
+func (s *dnsServer) startNotify(started chan<- struct{}) error {
 	udpAddr, err := net.ResolveUDPAddr("udp", s.addr)
 	if err != nil {
 		return fmt.Errorf("resolving dns addr: %w", err)
@@ -43,14 +50,21 @@ func (s *dnsServer) Start() error {
 	s.mu.Lock()
 	s.conn = conn
 	s.srv = &dns.Server{PacketConn: conn, Handler: dns.HandlerFunc(s.handle)}
+	if started != nil {
+		s.srv.NotifyStartedFunc = func() { close(started) }
+	}
 	s.mu.Unlock()
 
 	go func() {
-		if err := s.srv.ActivateAndServe(); err != nil {
-			select {
-			case s.errCh <- err:
-			default:
-			}
+		err := s.srv.ActivateAndServe()
+		if err == nil {
+			return
+		}
+		// Drop the error if shutdown has started; avoids send-on-closed-channel panics.
+		select {
+		case <-s.done:
+		case s.errCh <- err:
+		default:
 		}
 	}()
 	return nil
@@ -65,9 +79,13 @@ func (s *dnsServer) Shutdown() error {
 	if srv == nil {
 		return nil
 	}
-	err := srv.Shutdown()
-	s.closeErr.Do(func() { close(s.errCh) })
-	return err
+	select {
+	case <-s.done:
+		return nil // already shut down
+	default:
+		close(s.done)
+	}
+	return srv.Shutdown()
 }
 
 func (s *dnsServer) LocalAddr() net.Addr {

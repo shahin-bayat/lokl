@@ -72,14 +72,30 @@ func TestDNSServerRefusesParentApex(t *testing.T) {
 	}
 }
 
+func TestDNSServerShutdownNoPanic(t *testing.T) {
+	srv, _ := startTestDNSServer(t, []string{"x.test"})
+	if err := srv.Shutdown(); err != nil {
+		t.Fatalf("first shutdown: %v", err)
+	}
+	if err := srv.Shutdown(); err != nil {
+		t.Fatalf("second shutdown should be idempotent: %v", err)
+	}
+}
+
 func startTestDNSServer(t *testing.T, parents []string) (*dnsServer, string) {
 	t.Helper()
 	srv, err := newDNSServer("127.0.0.1:0", parents)
 	if err != nil {
 		t.Fatalf("new dns server: %v", err)
 	}
-	if err := srv.Start(); err != nil {
+	started := make(chan struct{})
+	if err := srv.startNotify(started); err != nil {
 		t.Fatalf("start: %v", err)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("dns server did not start in time")
 	}
 	addr := srv.LocalAddr()
 	if addr == nil {
