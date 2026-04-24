@@ -36,25 +36,6 @@ type Proxy struct {
 	dns             *dnsServer
 }
 
-func collectWildcardParents(cfg *config.Config) []string {
-	seen := map[string]struct{}{}
-	var parents []string
-	for _, svc := range cfg.Services {
-		for _, sd := range svc.Subdomains {
-			after, ok := strings.CutPrefix(sd, "*.")
-			if !ok {
-				continue
-			}
-			if _, dup := seen[after]; dup {
-				continue
-			}
-			seen[after] = struct{}{}
-			parents = append(parents, after)
-		}
-	}
-	return parents
-}
-
 func New(cfg *config.Config) *Proxy {
 	r := newRouter(cfg)
 	parents := collectWildcardParents(cfg)
@@ -117,15 +98,39 @@ func (p *Proxy) Start() error {
 	if p.hasWildcard {
 		srv, err := newDNSServer(fmt.Sprintf("127.0.0.1:%d", p.dnsPort), p.wildcardParents)
 		if err != nil {
+			_ = p.server.Shutdown(context.Background())
+			p.server = nil
 			return fmt.Errorf("dns server: %w", err)
 		}
 		if err := srv.Start(); err != nil {
-			return fmt.Errorf("dns server on 127.0.0.1:%d (set proxy.dns_port to override): %w", p.dnsPort, err)
+			_ = p.server.Shutdown(context.Background())
+			p.server = nil
+			return fmt.Errorf("dns server on 127.0.0.1:%d: %w", p.dnsPort, err)
 		}
+		// TODO: surface p.dns.Err() to the supervisor so runtime DNS failures are visible.
 		p.dns = srv
 	}
 
 	return nil
+}
+
+func collectWildcardParents(cfg *config.Config) []string {
+	seen := map[string]struct{}{}
+	var parents []string
+	for _, svc := range cfg.Services {
+		for _, sd := range svc.Subdomains {
+			after, ok := strings.CutPrefix(sd, "*.")
+			if !ok {
+				continue
+			}
+			if _, dup := seen[after]; dup {
+				continue
+			}
+			seen[after] = struct{}{}
+			parents = append(parents, after)
+		}
+	}
+	return parents
 }
 
 func (p *Proxy) Stop(cleanupDNS bool) error {
