@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/shahin-bayat/lokl/internal/config"
@@ -22,24 +23,51 @@ const (
 )
 
 type Proxy struct {
-	cfg     *config.Config
-	router  *router
-	certs   *certManager
-	hosts   *hostsManager
-	handler *handler
-	server  *http.Server
-	port    int
+	cfg             *config.Config
+	router          *router
+	certs           *certManager
+	hosts           *hostsManager
+	handler         *handler
+	server          *http.Server
+	port            int
+	hasWildcard     bool
+	wildcardParents []string
+	dnsPort         int
+	dns             *dnsServer
+}
+
+func collectWildcardParents(cfg *config.Config) []string {
+	seen := map[string]struct{}{}
+	var parents []string
+	for _, svc := range cfg.Services {
+		for _, sd := range svc.Subdomains {
+			after, ok := strings.CutPrefix(sd, "*.")
+			if !ok {
+				continue
+			}
+			if _, dup := seen[after]; dup {
+				continue
+			}
+			seen[after] = struct{}{}
+			parents = append(parents, after)
+		}
+	}
+	return parents
 }
 
 func New(cfg *config.Config) *Proxy {
 	r := newRouter(cfg)
+	parents := collectWildcardParents(cfg)
 	return &Proxy{
-		cfg:     cfg,
-		router:  r,
-		certs:   newCertManager(defaultCertDir),
-		hosts:   newHostsManager(cfg.Name),
-		handler: newHandler(r),
-		port:    defaultPort,
+		cfg:             cfg,
+		router:          r,
+		certs:           newCertManager(defaultCertDir),
+		hosts:           newHostsManager(cfg.Name),
+		handler:         newHandler(r),
+		port:            defaultPort,
+		hasWildcard:     len(parents) > 0,
+		wildcardParents: parents,
+		dnsPort:         defaultDNSPort,
 	}
 }
 
@@ -86,6 +114,17 @@ func (p *Proxy) Start() error {
 		}
 	}()
 
+	if p.hasWildcard {
+		srv, err := newDNSServer(fmt.Sprintf("127.0.0.1:%d", p.dnsPort), p.wildcardParents)
+		if err != nil {
+			return fmt.Errorf("dns server: %w", err)
+		}
+		if err := srv.Start(); err != nil {
+			return fmt.Errorf("dns server on 127.0.0.1:%d (set proxy.dns_port to override): %w", p.dnsPort, err)
+		}
+		p.dns = srv
+	}
+
 	return nil
 }
 
@@ -99,6 +138,13 @@ func (p *Proxy) Stop(cleanupDNS bool) error {
 		if err := p.server.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("shutting down server: %w", err))
 		}
+	}
+
+	if p.dns != nil {
+		if err := p.dns.Shutdown(); err != nil {
+			errs = append(errs, fmt.Errorf("shutting down dns server: %w", err))
+		}
+		p.dns = nil
 	}
 
 	if cleanupDNS {
