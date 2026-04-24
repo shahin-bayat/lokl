@@ -85,6 +85,32 @@ Remove DNS entries:
 sudo lokl dns remove
 ```
 
+## Wildcard subdomains
+
+Multi-tenant apps (Laravel tenancy, Rails tenancy, per-customer previews) assign subdomains at runtime. `subdomain` accepts a list so one service can answer every tenant:
+
+```yaml
+services:
+  web:
+    command: php artisan serve
+    subdomain:
+      - sellify.shop
+      - "*.sellify.shop"
+    port: 8000
+```
+
+### How it works
+
+- `sudo lokl dns setup` writes `/etc/hosts` plus `/etc/resolver/sellify.shop` so macOS forwards wildcard lookups to lokl.
+- `lokl up` starts an in-process DNS listener on `127.0.0.1:5454` that answers every subdomain with `127.0.0.1`.
+- The proxy cert's SAN list covers both the apex (`sellify.shop`) and the wildcard (`*.sellify.shop`) — TLS works for every tenant.
+
+### Limits
+
+- `*` must be the leftmost label: `"*.x.y"` is valid; `"a.*.y"` and `"*"` are not.
+- Reserved parents (`*.com`, `*.local`, `*.test`, `*.localhost`) are rejected.
+- macOS only for now. Linux support (systemd-resolved) lands in a follow-up release.
+
 ## Toggle Proxy
 
 In the TUI, press `p` to toggle between:

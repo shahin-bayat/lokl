@@ -59,7 +59,7 @@ services:
 | `env` | map | Environment variables |
 | `env_file` | list | Paths to `.env` files to load |
 | `volumes` | list | Volume mounts. `host:container` for bind mounts, `name:container` for named volumes, bare `/container/path` for anonymous volumes (mask a dir from an outer bind mount). |
-| `subdomain` | string | Subdomain for proxy routing |
+| `subdomain` | string or list of strings | Subdomain for proxy routing. A list may mix exact names and wildcards like `"*.sellify.shop"` for multi-tenant apps (macOS only for now). |
 | `depends_on` | list | Services to start first |
 | `health` | object | Health check configuration (see below) |
 | `autostart` | bool | Start automatically (default: true) |

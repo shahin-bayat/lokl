@@ -112,6 +112,22 @@ services:
       retries: 10
 ```
 
+### Wildcard subdomains (multi-tenant apps)
+
+```yaml
+services:
+  web:
+    command: php artisan serve
+    subdomain:
+      - sellify.shop
+      - "*.sellify.shop"
+    port: 8000
+```
+
+`sudo lokl dns setup` writes `/etc/hosts` **and** `/etc/resolver/sellify.shop`; `lokl up` then runs an in-process DNS listener so every subdomain resolves locally. Cert SANs cover both apex and wildcard.
+
+macOS only for now; Linux support (systemd-resolved) is coming in a follow-up release.
+
 Containers in the same lokl project share a bridge network (`lokl-{name}`).
 They can reach each other by service name — no need to expose ports between containers:
 
