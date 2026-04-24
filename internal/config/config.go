@@ -43,6 +43,7 @@ type Service struct {
 	AutoStart    *bool  `yaml:"autostart"`
 	Restart      string `yaml:"restart"`
 	ReadyTimeout string `yaml:"ready_timeout"`
+	ProxyOnly    bool   `yaml:"proxy_only"`
 
 	Volumes []string `yaml:"volumes"`
 	Ports   []string `yaml:"ports"`
