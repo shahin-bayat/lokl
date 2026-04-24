@@ -20,6 +20,11 @@ func applyDefaults(cfg *Config) {
 	}
 
 	for name, svc := range cfg.Services {
+		if svc.ProxyOnly {
+			cfg.Services[name] = svc
+			continue
+		}
+
 		if svc.AutoStart == nil {
 			t := true
 			svc.AutoStart = &t

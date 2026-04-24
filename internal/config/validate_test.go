@@ -240,3 +240,43 @@ func TestValidateProxyOnlyRejectsEveryForbiddenField(t *testing.T) {
 		}
 	})
 }
+
+func TestProxyOnlyDoesNotInheritDefaults(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Env:   map[string]string{"GLOBAL": "1"},
+		Services: map[string]Service{
+			"real": {Command: StringOrSlice{Args: []string{"sh"}, Shell: true}, Port: 8000, Subdomains: Subdomains{"api"}},
+			"shim": {ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"shim"}},
+		},
+	}
+
+	applyDefaults(cfg)
+
+	shim := cfg.Services["shim"]
+	if shim.AutoStart != nil {
+		t.Errorf("proxy-only AutoStart should remain nil, got %v", *shim.AutoStart)
+	}
+	if shim.Restart != "" {
+		t.Errorf("proxy-only Restart should remain empty, got %q", shim.Restart)
+	}
+	if len(shim.Env) != 0 {
+		t.Errorf("proxy-only Env should not inherit cfg.Env, got %v", shim.Env)
+	}
+
+	real := cfg.Services["real"]
+	if real.AutoStart == nil || !*real.AutoStart {
+		t.Errorf("normal service should default AutoStart=true, got %v", real.AutoStart)
+	}
+	if real.Restart != "on-failure" {
+		t.Errorf("normal service should default Restart=on-failure, got %q", real.Restart)
+	}
+	if real.Env["GLOBAL"] != "1" {
+		t.Errorf("normal service should inherit cfg.Env, got %v", real.Env)
+	}
+
+	if err := validate(cfg); err != nil {
+		t.Fatalf("validate after defaults: %v", err)
+	}
+}
