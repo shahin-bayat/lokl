@@ -10,10 +10,10 @@ func TestNewRouter(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
-			"web":          {Subdomain: "app", Port: 8080},
-			"api":          {Subdomain: "api", Port: 3000},
-			"no-subdomain": {Port: 5000},           // should be skipped
-			"no-port":      {Subdomain: "ignored"}, // should be skipped
+			"web":          {Subdomains: config.Subdomains{"app"}, Port: 8080},
+			"api":          {Subdomains: config.Subdomains{"api"}, Port: 3000},
+			"no-subdomain": {Port: 5000},                               // should be skipped
+			"no-port":      {Subdomains: config.Subdomains{"ignored"}}, // should be skipped
 		},
 	}
 
@@ -34,14 +34,14 @@ func TestRouterMatch(t *testing.T) {
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
 			"web": {
-				Subdomain: "app",
-				Port:      8080,
+				Subdomains: config.Subdomains{"app"},
+				Port:       8080,
 				Rewrite: &config.RewriteConfig{
 					StripPrefix: "web",
 					Fallback:    "/index.html",
 				},
 			},
-			"api": {Subdomain: "api.example.com", Port: 3000}, // FQDN already
+			"api": {Subdomains: config.Subdomains{"api.example.com"}, Port: 3000}, // FQDN already
 		},
 	}
 
@@ -84,8 +84,8 @@ func TestRouterMatchWithRewrite(t *testing.T) {
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
 			"web": {
-				Subdomain: "app",
-				Port:      8080,
+				Subdomains: config.Subdomains{"app"},
+				Port:       8080,
 				Rewrite: &config.RewriteConfig{
 					StripPrefix: "web",
 					Fallback:    "/index.html",
@@ -112,7 +112,7 @@ func TestRouterSetEnabled(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
-			"web": {Subdomain: "app", Port: 8080},
+			"web": {Subdomains: config.Subdomains{"app"}, Port: 8080},
 		},
 	}
 
@@ -143,8 +143,8 @@ func TestRouterEnabledDomains(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
-			"web": {Subdomain: "app", Port: 8080},
-			"api": {Subdomain: "api", Port: 3000},
+			"web": {Subdomains: config.Subdomains{"app"}, Port: 8080},
+			"api": {Subdomains: config.Subdomains{"api"}, Port: 3000},
 		},
 	}
 
@@ -166,14 +166,14 @@ func TestRouterMatchSharedSubdomain(t *testing.T) {
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
 			"funnel": {
-				Subdomain: "client",
-				Port:      8080,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "customer-funnel"},
+				Subdomains: config.Subdomains{"client"},
+				Port:       8080,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "customer-funnel"},
 			},
 			"activation": {
-				Subdomain: "client",
-				Port:      8083,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "activation/waipu"},
+				Subdomains: config.Subdomains{"client"},
+				Port:       8083,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "activation/waipu"},
 			},
 		},
 	}
@@ -209,14 +209,14 @@ func TestRouterMatchSegmentSafe(t *testing.T) {
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
 			"api": {
-				Subdomain: "app",
-				Port:      3000,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "api"},
+				Subdomains: config.Subdomains{"app"},
+				Port:       3000,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "api"},
 			},
 			"api2": {
-				Subdomain: "app",
-				Port:      3001,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "api2"},
+				Subdomains: config.Subdomains{"app"},
+				Port:       3001,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "api2"},
 			},
 		},
 	}
@@ -239,14 +239,14 @@ func TestRouterMatchNoPrefix404(t *testing.T) {
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
 			"a": {
-				Subdomain: "client",
-				Port:      8080,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "app-a"},
+				Subdomains: config.Subdomains{"client"},
+				Port:       8080,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "app-a"},
 			},
 			"b": {
-				Subdomain: "client",
-				Port:      8081,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "app-b"},
+				Subdomains: config.Subdomains{"client"},
+				Port:       8081,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "app-b"},
 			},
 		},
 	}
@@ -263,14 +263,14 @@ func TestRouterSetEnabledByName(t *testing.T) {
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
 			"funnel": {
-				Subdomain: "client",
-				Port:      8080,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "customer-funnel"},
+				Subdomains: config.Subdomains{"client"},
+				Port:       8080,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "customer-funnel"},
 			},
 			"activation": {
-				Subdomain: "client",
-				Port:      8083,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "activation/waipu"},
+				Subdomains: config.Subdomains{"client"},
+				Port:       8083,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "activation/waipu"},
 			},
 		},
 	}
@@ -301,14 +301,14 @@ func TestRouterEnabledDomainsSharedSubdomain(t *testing.T) {
 		Proxy: config.ProxyConfig{Domain: "example.com"},
 		Services: map[string]config.Service{
 			"a": {
-				Subdomain: "client",
-				Port:      8080,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "app-a"},
+				Subdomains: config.Subdomains{"client"},
+				Port:       8080,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "app-a"},
 			},
 			"b": {
-				Subdomain: "client",
-				Port:      8081,
-				Rewrite:   &config.RewriteConfig{StripPrefix: "app-b"},
+				Subdomains: config.Subdomains{"client"},
+				Port:       8081,
+				Rewrite:    &config.RewriteConfig{StripPrefix: "app-b"},
 			},
 		},
 	}

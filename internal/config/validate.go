@@ -17,7 +17,7 @@ func validate(cfg *Config) error {
 	}
 
 	for name, svc := range cfg.Services {
-		if svc.Subdomain != "" && cfg.Proxy.Domain == "" {
+		if len(svc.Subdomains) > 0 && cfg.Proxy.Domain == "" {
 			return fmt.Errorf("service %q has subdomain but proxy.domain is not configured", name)
 		}
 	}
@@ -86,7 +86,7 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		return fmt.Errorf("service %q: path is only valid for command-based services; container services cannot set path", name)
 	}
 
-	if svc.Subdomain != "" && svc.Port == 0 {
+	if len(svc.Subdomains) > 0 && svc.Port == 0 {
 		return fmt.Errorf("service %q: port is required when subdomain is set", name)
 	}
 
@@ -206,27 +206,29 @@ func checkDuplicateSubdomains(cfg *Config) error {
 	type key struct{ fqdn, prefix string }
 	seen := make(map[key]string)
 	for name, svc := range cfg.Services {
-		if svc.Subdomain == "" {
-			continue
-		}
-		fqdn := svc.Subdomain
-		if !strings.Contains(fqdn, ".") && cfg.Proxy.Domain != "" {
-			fqdn = svc.Subdomain + "." + cfg.Proxy.Domain
-		}
-		prefix := ""
-		if svc.Rewrite != nil {
-			prefix = strings.Trim(svc.Rewrite.StripPrefix, "/")
-		}
-		k := key{fqdn, prefix}
-		if existing, ok := seen[k]; ok {
-			if prefix == "" {
-				return fmt.Errorf("services %q and %q: same subdomain with no prefix",
-					existing, name)
+		for _, sd := range svc.Subdomains {
+			if sd == "" {
+				continue
 			}
-			return fmt.Errorf("services %q and %q: same subdomain with same prefix %q",
-				existing, name, prefix)
+			fqdn := sd
+			if !strings.Contains(fqdn, ".") && cfg.Proxy.Domain != "" {
+				fqdn = sd + "." + cfg.Proxy.Domain
+			}
+			prefix := ""
+			if svc.Rewrite != nil {
+				prefix = strings.Trim(svc.Rewrite.StripPrefix, "/")
+			}
+			k := key{fqdn, prefix}
+			if existing, ok := seen[k]; ok {
+				if prefix == "" {
+					return fmt.Errorf("services %q and %q: same subdomain with no prefix",
+						existing, name)
+				}
+				return fmt.Errorf("services %q and %q: same subdomain with same prefix %q",
+					existing, name, prefix)
+			}
+			seen[k] = name
 		}
-		seen[k] = name
 	}
 	return nil
 }

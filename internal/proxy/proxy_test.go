@@ -20,7 +20,7 @@ func TestStartPortConflict(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "test.dev"},
 		Services: map[string]config.Service{
-			"svc": {Port: 9999, Subdomain: "app"},
+			"svc": {Port: 9999, Subdomains: config.Subdomains{"app"}},
 		},
 	}
 	p := New(cfg)

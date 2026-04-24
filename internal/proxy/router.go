@@ -35,31 +35,36 @@ func newRouter(cfg *config.Config) *router {
 	}
 
 	for name, svc := range cfg.Services {
-		if svc.Subdomain == "" || svc.Port == 0 {
+		if svc.Port == 0 {
 			continue
 		}
-
-		fqdn := svc.Subdomain
-		if !strings.Contains(svc.Subdomain, ".") && cfg.Proxy.Domain != "" {
-			fqdn = svc.Subdomain + "." + cfg.Proxy.Domain
-		}
-
-		rt := &route{
-			name:   name,
-			domain: fqdn,
-			port:   svc.Port,
-		}
-		rt.enabled.Store(true)
-
-		if svc.Rewrite != nil {
-			rt.rewrite = &rewriteConfig{
-				stripPrefix: strings.Trim(svc.Rewrite.StripPrefix, "/"),
-				fallback:    svc.Rewrite.Fallback,
+		for _, sd := range svc.Subdomains {
+			if sd == "" {
+				continue
 			}
-		}
 
-		r.byHost[fqdn] = append(r.byHost[fqdn], rt)
-		r.byName[name] = rt
+			fqdn := sd
+			if !strings.Contains(sd, ".") && cfg.Proxy.Domain != "" {
+				fqdn = sd + "." + cfg.Proxy.Domain
+			}
+
+			rt := &route{
+				name:   name,
+				domain: fqdn,
+				port:   svc.Port,
+			}
+			rt.enabled.Store(true)
+
+			if svc.Rewrite != nil {
+				rt.rewrite = &rewriteConfig{
+					stripPrefix: strings.Trim(svc.Rewrite.StripPrefix, "/"),
+					fallback:    svc.Rewrite.Fallback,
+				}
+			}
+
+			r.byHost[fqdn] = append(r.byHost[fqdn], rt)
+			r.byName[name] = rt
+		}
 	}
 
 	for _, routes := range r.byHost {

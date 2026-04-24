@@ -465,7 +465,7 @@ func TestToggleProxy(t *testing.T) {
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
-		"web": {Command: shCmd("npm start"), Subdomain: "app"},
+		"web": {Command: shCmd("npm start"), Subdomains: config.Subdomains{"app"}},
 	})
 	s := newTestSupervisor(cfg, nil, proxy)
 
@@ -528,8 +528,8 @@ func TestServices(t *testing.T) {
 	}
 
 	cfg := proxyConfig(map[string]config.Service{
-		"web": {Command: shCmd("npm start"), Port: 3000, Subdomain: "app"},
-		"api": {Command: shCmd("go run ."), Port: 8080, Subdomain: "api"},
+		"web": {Command: shCmd("npm start"), Port: 3000, Subdomains: config.Subdomains{"app"}},
+		"api": {Command: shCmd("go run ."), Port: 8080, Subdomains: config.Subdomains{"api"}},
 	})
 	s := newTestSupervisor(cfg, factory, proxy)
 
@@ -565,10 +565,10 @@ func TestServicesWithPathPrefix(t *testing.T) {
 
 	cfg := proxyConfig(map[string]config.Service{
 		"web": {
-			Command:   shCmd("npm start"),
-			Port:      3000,
-			Subdomain: "app",
-			Rewrite:   &config.RewriteConfig{StripPrefix: "web"},
+			Command:    shCmd("npm start"),
+			Port:       3000,
+			Subdomains: config.Subdomains{"app"},
+			Rewrite:    &config.RewriteConfig{StripPrefix: "web"},
 		},
 	})
 	s := newTestSupervisor(cfg, nil, proxy)
@@ -627,8 +627,8 @@ func TestServiceDomain(t *testing.T) {
 		svc  config.Service
 		want string
 	}{
-		{"subdomain expansion", config.Service{Subdomain: "api"}, "api.example.com"},
-		{"fqdn passthrough", config.Service{Subdomain: "api.other.com"}, "api.other.com"},
+		{"subdomain expansion", config.Service{Subdomains: config.Subdomains{"api"}}, "api.example.com"},
+		{"fqdn passthrough", config.Service{Subdomains: config.Subdomains{"api.other.com"}}, "api.other.com"},
 		{"empty subdomain", config.Service{}, ""},
 	}
 
@@ -646,7 +646,7 @@ func TestServiceDomainNoProxyDomain(t *testing.T) {
 	cfg := simpleConfig(nil)
 	s := newTestSupervisor(cfg, nil, nil)
 
-	got := s.serviceDomain(config.Service{Subdomain: "api"})
+	got := s.serviceDomain(config.Service{Subdomains: config.Subdomains{"api"}})
 	if got != "" {
 		t.Errorf("serviceDomain() = %q, want empty (no proxy domain)", got)
 	}

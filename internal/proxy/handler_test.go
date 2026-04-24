@@ -113,7 +113,7 @@ func TestHandlerServeHTTPLocalRoute(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "t.example.com"},
 		Services: map[string]config.Service{
-			"web": {Subdomain: "app", Port: port},
+			"web": {Subdomains: config.Subdomains{"app"}, Port: port},
 		},
 	}
 
@@ -165,7 +165,7 @@ func TestHandlerXForwardedHeaders(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "t.example.com"},
 		Services: map[string]config.Service{
-			"web": {Subdomain: "app", Port: port},
+			"web": {Subdomains: config.Subdomains{"app"}, Port: port},
 		},
 	}
 
@@ -198,7 +198,7 @@ func TestHandlerResponseHeaders(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "t.example.com"},
 		Services: map[string]config.Service{
-			"web": {Subdomain: "app", Port: port},
+			"web": {Subdomains: config.Subdomains{"app"}, Port: port},
 		},
 	}
 

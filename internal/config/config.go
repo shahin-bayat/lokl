@@ -28,8 +28,8 @@ type Service struct {
 	Image   string        `yaml:"image"`
 	Path    string        `yaml:"path"`
 
-	Port      int    `yaml:"port"`
-	Subdomain string `yaml:"subdomain"`
+	Port       int        `yaml:"port"`
+	Subdomains Subdomains `yaml:"subdomain"`
 
 	Rewrite *RewriteConfig `yaml:"rewrite"`
 
@@ -78,6 +78,26 @@ func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (s StringOrSlice) IsSet() bool { return len(s.Args) > 0 }
+
+// Subdomains accepts either a YAML scalar or sequence.
+// Stored internally as a flat string slice.
+type Subdomains []string
+
+func (s *Subdomains) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		*s = []string{value.Value}
+	case yaml.SequenceNode:
+		var list []string
+		if err := value.Decode(&list); err != nil {
+			return err
+		}
+		*s = list
+	default:
+		return fmt.Errorf("subdomain: expected string or sequence, got %v", value.Tag)
+	}
+	return nil
+}
 
 type HealthConfig struct {
 	Path     string        `yaml:"path"`

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -118,7 +119,7 @@ func TestValidate(t *testing.T) {
 			name: "subdomain without proxy domain",
 			cfg: Config{
 				Name:     "test",
-				Services: map[string]Service{"a": {Command: cmdStr("x"), Subdomain: "app", Port: 3000}},
+				Services: map[string]Service{"a": {Command: cmdStr("x"), Subdomains: Subdomains{"app"}, Port: 3000}},
 			},
 			wantErr: "has subdomain but proxy.domain is not configured",
 		},
@@ -127,7 +128,7 @@ func TestValidate(t *testing.T) {
 			cfg: Config{
 				Name:     "test",
 				Proxy:    ProxyConfig{Domain: "test.dev"},
-				Services: map[string]Service{"a": {Command: cmdStr("x"), Subdomain: "app"}},
+				Services: map[string]Service{"a": {Command: cmdStr("x"), Subdomains: Subdomains{"app"}}},
 			},
 			wantErr: "port is required when subdomain is set",
 		},
@@ -247,8 +248,8 @@ func TestValidate(t *testing.T) {
 				Name:  "test",
 				Proxy: ProxyConfig{Domain: "test.dev"},
 				Services: map[string]Service{
-					"a": {Command: cmdStr("x"), Subdomain: "client", Port: 8080},
-					"b": {Command: cmdStr("y"), Subdomain: "client", Port: 8081},
+					"a": {Command: cmdStr("x"), Subdomains: Subdomains{"client"}, Port: 8080},
+					"b": {Command: cmdStr("y"), Subdomains: Subdomains{"client"}, Port: 8081},
 				},
 			},
 			wantErr: "same subdomain with no prefix",
@@ -259,8 +260,8 @@ func TestValidate(t *testing.T) {
 				Name:  "test",
 				Proxy: ProxyConfig{Domain: "test.dev"},
 				Services: map[string]Service{
-					"a": {Command: cmdStr("x"), Subdomain: "client", Port: 8080, Rewrite: &RewriteConfig{StripPrefix: "app-a"}},
-					"b": {Command: cmdStr("y"), Subdomain: "client", Port: 8081, Rewrite: &RewriteConfig{StripPrefix: "app-b"}},
+					"a": {Command: cmdStr("x"), Subdomains: Subdomains{"client"}, Port: 8080, Rewrite: &RewriteConfig{StripPrefix: "app-a"}},
+					"b": {Command: cmdStr("y"), Subdomains: Subdomains{"client"}, Port: 8081, Rewrite: &RewriteConfig{StripPrefix: "app-b"}},
 				},
 			},
 			wantErr: "",
@@ -510,6 +511,29 @@ func TestServiceCommandParsing(t *testing.T) {
 			}
 			if s.Command.Shell != tt.wantShell {
 				t.Errorf("shell = %v, want %v", s.Command.Shell, tt.wantShell)
+			}
+		})
+	}
+}
+
+func TestSubdomainsUnmarshal(t *testing.T) {
+	cases := []struct {
+		name string
+		yaml string
+		want []string
+	}{
+		{"scalar", "subdomain: api.x.test", []string{"api.x.test"}},
+		{"list", "subdomain:\n  - x.test\n  - \"*.x.test\"", []string{"x.test", "*.x.test"}},
+		{"missing", "", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var svc Service
+			if err := yaml.Unmarshal([]byte(tc.yaml), &svc); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if !reflect.DeepEqual([]string(svc.Subdomains), tc.want) {
+				t.Fatalf("got %v want %v", svc.Subdomains, tc.want)
 			}
 		})
 	}
