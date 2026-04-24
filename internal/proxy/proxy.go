@@ -153,7 +153,7 @@ func (p *Proxy) Stop(cleanupDNS bool) error {
 	}
 
 	if cleanupDNS {
-		if err := p.sysDNS.Remove(); err != nil {
+		if err := p.sysDNS.remove(); err != nil {
 			errs = append(errs, fmt.Errorf("removing DNS entries: %w", err))
 		}
 	}
