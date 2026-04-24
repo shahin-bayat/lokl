@@ -217,7 +217,11 @@ func (p *Proxy) NeedsSudo() bool {
 }
 
 func (p *Proxy) UnresolvedDomains() []string {
-	return p.sysDNS.unresolved(p.router.enabledDomains())
+	missing := p.sysDNS.unresolved(p.router.enabledDomains())
+	for _, parent := range p.sysDNS.MissingWildcardParents() {
+		missing = append(missing, "*."+parent)
+	}
+	return missing
 }
 
 func (p *Proxy) DNSBlock() string {

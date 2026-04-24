@@ -47,6 +47,16 @@ func (r *resolverDir) Remove(parents []string) error {
 	return nil
 }
 
+func (r *resolverDir) Missing(parents []string) []string {
+	var missing []string
+	for _, p := range parents {
+		if _, err := os.Stat(filepath.Join(r.base, p)); err != nil {
+			missing = append(missing, p)
+		}
+	}
+	return missing
+}
+
 // FlushCache is best-effort; a stale cache is a minor UX issue, not a correctness one.
 func (r *resolverDir) FlushCache() error {
 	_ = exec.Command("dscacheutil", "-flushcache").Run()

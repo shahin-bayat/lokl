@@ -17,3 +17,7 @@ func (r *resolverDir) Write(parents []string) error {
 
 func (r *resolverDir) Remove(parents []string) error { return nil }
 func (r *resolverDir) FlushCache() error             { return nil }
+
+// Missing reports all parents as missing on unsupported platforms so callers
+// surface the gap instead of silently claiming DNS is wired up.
+func (r *resolverDir) Missing(parents []string) []string { return parents }

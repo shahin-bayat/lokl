@@ -11,6 +11,7 @@ type fakeResolver struct {
 	written [][]string
 	removed [][]string
 	flushed int
+	missing []string
 }
 
 func (f *fakeResolver) Write(p []string) error {
@@ -22,6 +23,18 @@ func (f *fakeResolver) Remove(p []string) error {
 	return nil
 }
 func (f *fakeResolver) FlushCache() error { f.flushed++; return nil }
+func (f *fakeResolver) Missing(parents []string) []string {
+	var out []string
+	for _, p := range parents {
+		for _, m := range f.missing {
+			if p == m {
+				out = append(out, p)
+				break
+			}
+		}
+	}
+	return out
+}
 
 func TestDNSManagerSetupWritesResolverFiles(t *testing.T) {
 	tmp := t.TempDir()
@@ -74,6 +87,27 @@ func TestDNSManagerSetupSkipsResolverWithoutWildcards(t *testing.T) {
 	}
 	if len(fr.written) != 0 || fr.flushed != 0 {
 		t.Fatalf("resolver should be untouched when no wildcards; writes=%v flushed=%d", fr.written, fr.flushed)
+	}
+}
+
+func TestUnresolvedReportsMissingWildcardParents(t *testing.T) {
+	fr := &fakeResolver{missing: []string{"sellify.shop"}}
+	d := &dnsManager{
+		project:         "demo",
+		wildcardParents: []string{"sellify.shop"},
+		resolver:        fr,
+	}
+	got := d.MissingWildcardParents()
+	if len(got) != 1 || got[0] != "sellify.shop" {
+		t.Fatalf("got=%v want [sellify.shop]", got)
+	}
+}
+
+func TestMissingWildcardParentsEmptyWithoutWildcards(t *testing.T) {
+	fr := &fakeResolver{}
+	d := &dnsManager{project: "demo", resolver: fr}
+	if got := d.MissingWildcardParents(); len(got) != 0 {
+		t.Fatalf("got=%v want nil", got)
 	}
 }
 

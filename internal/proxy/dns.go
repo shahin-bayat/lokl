@@ -20,6 +20,8 @@ type resolverWriter interface {
 	Write(parents []string) error
 	Remove(parents []string) error
 	FlushCache() error
+	// Missing returns the subset of parents that lack resolver installation.
+	Missing(parents []string) []string
 }
 
 type dnsManager struct {
@@ -125,6 +127,13 @@ func (d *dnsManager) needsSudo() bool {
 	}
 	_ = f.Close()
 	return false
+}
+
+func (d *dnsManager) MissingWildcardParents() []string {
+	if len(d.wildcardParents) == 0 {
+		return nil
+	}
+	return d.resolver.Missing(d.wildcardParents)
 }
 
 func (d *dnsManager) unresolved(domains []string) []string {
