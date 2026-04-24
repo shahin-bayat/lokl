@@ -12,7 +12,7 @@ func (r *resolverDir) Write(parents []string) error {
 	if len(parents) == 0 {
 		return nil
 	}
-	return errors.New("wildcard DNS not supported on this platform yet (PR 2 adds Linux)")
+	return errors.New("wildcard DNS is only supported on macOS today; Linux support is tracked for a future release")
 }
 
 func (r *resolverDir) Remove(parents []string) error { return nil }

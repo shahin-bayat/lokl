@@ -52,3 +52,35 @@ func TestResolverFileLifecycle(t *testing.T) {
 		t.Fatalf("remove idempotent: %v", err)
 	}
 }
+
+func TestResolverFileRespectsForeignFiles(t *testing.T) {
+	dir := t.TempDir()
+	r := &resolverDir{base: dir, port: 5454}
+
+	foreign := filepath.Join(dir, "foreign.test")
+	if err := os.WriteFile(foreign, []byte("nameserver 9.9.9.9\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Write([]string{"foreign.test"}); err == nil {
+		t.Fatal("Write should refuse to overwrite a foreign resolver file")
+	}
+	if err := r.Remove([]string{"foreign.test"}); err != nil {
+		t.Fatalf("Remove should not error on foreign file: %v", err)
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Fatalf("foreign file should survive Remove: %v", err)
+	}
+}
+
+func TestResolverFileOverwritesLoklOwned(t *testing.T) {
+	dir := t.TempDir()
+	r := &resolverDir{base: dir, port: 5454}
+
+	if err := r.Write([]string{"sellify.shop"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Write([]string{"sellify.shop"}); err != nil {
+		t.Fatalf("second Write on lokl-owned file should succeed: %v", err)
+	}
+}
