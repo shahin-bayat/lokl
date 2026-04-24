@@ -16,6 +16,7 @@ import (
 	"github.com/shahin-bayat/lokl/internal/lockfile"
 	"github.com/shahin-bayat/lokl/internal/process"
 	"github.com/shahin-bayat/lokl/internal/proxy"
+	"github.com/shahin-bayat/lokl/internal/runner/proxyonly"
 	"github.com/shahin-bayat/lokl/internal/supervisor"
 	"github.com/shahin-bayat/lokl/internal/tui"
 	"github.com/shahin-bayat/lokl/internal/types"
@@ -81,9 +82,12 @@ func runUp(cmd *cobra.Command, args []string) error {
 	runners := make(map[string]supervisor.ProcessRunner)
 	pf := func(name string, svc config.Service, onChange func(), onCrash func()) supervisor.ProcessRunner {
 		var r supervisor.ProcessRunner
-		if svc.Image != "" {
+		switch {
+		case svc.ProxyOnly:
+			r = proxyonly.New(name, svc, onChange, onCrash)
+		case svc.Image != "":
 			r = docker.NewContainer(name, svc, dockerClient, projectNetwork, onChange, onCrash)
-		} else {
+		default:
 			r = process.New(name, svc, onChange, onCrash)
 		}
 		runners[name] = r
