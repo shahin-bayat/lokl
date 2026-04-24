@@ -79,14 +79,16 @@ func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
 
 func (s StringOrSlice) IsSet() bool { return len(s.Args) > 0 }
 
-// Subdomains accepts either a YAML scalar or sequence.
-// Stored internally as a flat string slice.
 type Subdomains []string
 
 func (s *Subdomains) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	case yaml.ScalarNode:
-		*s = []string{value.Value}
+		var str string
+		if err := value.Decode(&str); err != nil {
+			return err
+		}
+		*s = []string{str}
 	case yaml.SequenceNode:
 		var list []string
 		if err := value.Decode(&list); err != nil {
@@ -94,7 +96,7 @@ func (s *Subdomains) UnmarshalYAML(value *yaml.Node) error {
 		}
 		*s = list
 	default:
-		return fmt.Errorf("subdomain: expected string or sequence, got %v", value.Tag)
+		return fmt.Errorf("subdomain must be a string or list of strings, got %v", value.Tag)
 	}
 	return nil
 }

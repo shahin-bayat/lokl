@@ -1,7 +1,6 @@
 package config
 
 import (
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -524,7 +523,7 @@ func TestSubdomainsUnmarshal(t *testing.T) {
 	}{
 		{"scalar", "subdomain: api.x.test", []string{"api.x.test"}},
 		{"list", "subdomain:\n  - x.test\n  - \"*.x.test\"", []string{"x.test", "*.x.test"}},
-		{"missing", "", nil},
+		{"null", "subdomain:", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -532,9 +531,17 @@ func TestSubdomainsUnmarshal(t *testing.T) {
 			if err := yaml.Unmarshal([]byte(tc.yaml), &svc); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
-			if !reflect.DeepEqual([]string(svc.Subdomains), tc.want) {
+			if !slices.Equal(svc.Subdomains, tc.want) {
 				t.Fatalf("got %v want %v", svc.Subdomains, tc.want)
 			}
 		})
 	}
+
+	t.Run("mapping rejected", func(t *testing.T) {
+		var svc Service
+		err := yaml.Unmarshal([]byte("subdomain: {foo: bar}"), &svc)
+		if err == nil {
+			t.Fatalf("expected error for mapping, got nil")
+		}
+	})
 }

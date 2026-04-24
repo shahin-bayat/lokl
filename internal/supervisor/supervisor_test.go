@@ -634,9 +634,9 @@ func TestServiceDomain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := s.serviceDomain(tt.svc)
+			got := s.primaryDomain(tt.svc)
 			if got != tt.want {
-				t.Errorf("serviceDomain() = %q, want %q", got, tt.want)
+				t.Errorf("primaryDomain() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -646,9 +646,9 @@ func TestServiceDomainNoProxyDomain(t *testing.T) {
 	cfg := simpleConfig(nil)
 	s := newTestSupervisor(cfg, nil, nil)
 
-	got := s.serviceDomain(config.Service{Subdomains: config.Subdomains{"api"}})
+	got := s.primaryDomain(config.Service{Subdomains: config.Subdomains{"api"}})
 	if got != "" {
-		t.Errorf("serviceDomain() = %q, want empty (no proxy domain)", got)
+		t.Errorf("primaryDomain() = %q, want empty (no proxy domain)", got)
 	}
 }
 
