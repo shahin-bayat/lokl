@@ -111,6 +111,8 @@ services:
 - Reserved parents (`*.com`, `*.org`, `*.net`, `*.local`, `*.test`, `*.localhost`) are rejected.
 - macOS only for now. Linux support (systemd-resolved) lands in a follow-up release.
 
+A service with `proxy_only: true` registers a subdomain route without starting a process or container — useful when one container exposes multiple HTTP ports (MinIO API + console) or when a subdomain should forward to a host-native process. See the [services documentation](/lokl/config/services/#proxy-only-services) for the full example.
+
 ## Toggle Proxy
 
 In the TUI, press `p` to toggle between:
