@@ -253,6 +253,21 @@ func TestHasFileExtension(t *testing.T) {
 	}
 }
 
+func TestRemoteHost(t *testing.T) {
+	exact := &route{domain: "app.sellify.shop"}
+	wild := &route{domain: "*.sellify.shop", parent: "sellify.shop"}
+
+	if got := remoteHost(exact, "app.sellify.shop"); got != "app.sellify.shop" {
+		t.Errorf("exact: got %q want app.sellify.shop", got)
+	}
+	if got := remoteHost(wild, "acme.sellify.shop"); got != "acme.sellify.shop" {
+		t.Errorf("wildcard: got %q want acme.sellify.shop (not pattern)", got)
+	}
+	if got := remoteHost(wild, "acme.sellify.shop:8443"); got != "acme.sellify.shop" {
+		t.Errorf("wildcard with port: got %q want acme.sellify.shop", got)
+	}
+}
+
 func TestSelectTargetUsesIPv4Loopback(t *testing.T) {
 	rt := &route{port: 3000}
 	rt.enabled.Store(true)

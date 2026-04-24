@@ -102,11 +102,25 @@ func (h *handler) selectTarget(rt *route, r *http.Request) (target *url.URL, tra
 		return &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", rt.port)}, nil, false, nil
 	}
 
-	transport, err = h.remoteTransport(rt.domain)
+	host := remoteHost(rt, r.Host)
+	transport, err = h.remoteTransport(host)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	return &url.URL{Scheme: "https", Host: rt.domain}, transport, true, nil
+	return &url.URL{Scheme: "https", Host: host}, transport, true, nil
+}
+
+// remoteHost picks the host to dial for disabled (remote-fallback) routes.
+// For wildcards, rt.domain is a pattern (*.parent); use the concrete request
+// host instead so DNS resolution and SNI target a real name.
+func remoteHost(rt *route, reqHost string) string {
+	if rt.parent == "" {
+		return rt.domain
+	}
+	if idx := strings.LastIndex(reqHost, ":"); idx != -1 {
+		reqHost = reqHost[:idx]
+	}
+	return reqHost
 }
 
 // resolveViaDNS queries external DNS directly, bypassing /etc/hosts
