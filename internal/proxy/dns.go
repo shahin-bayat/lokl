@@ -16,15 +16,15 @@ const (
 	dnsLookupTimeout = 2 * time.Second
 )
 
-type hostsManager struct {
+type dnsManager struct {
 	project string
 }
 
-func newHostsManager(project string) *hostsManager {
-	return &hostsManager{project: project}
+func newDNSManager(project string) *dnsManager {
+	return &dnsManager{project: project}
 }
 
-func (h *hostsManager) add(domains []string) error {
+func (d *dnsManager) add(domains []string) error {
 	if len(domains) == 0 {
 		return nil
 	}
@@ -34,14 +34,14 @@ func (h *hostsManager) add(domains []string) error {
 		return fmt.Errorf("reading hosts file: %w", err)
 	}
 
-	cleaned := h.removeBlock(string(content))
+	cleaned := d.removeBlock(string(content))
 
 	var block strings.Builder
-	block.WriteString(h.startMarker() + "\n")
+	block.WriteString(d.startMarker() + "\n")
 	for _, domain := range domains {
 		fmt.Fprintf(&block, "127.0.0.1 %s\n", domain)
 	}
-	block.WriteString(h.endMarker() + "\n")
+	block.WriteString(d.endMarker() + "\n")
 
 	newContent := strings.TrimRight(cleaned, "\n") + "\n\n" + block.String()
 
@@ -52,13 +52,13 @@ func (h *hostsManager) add(domains []string) error {
 	return nil
 }
 
-func (h *hostsManager) remove() error {
+func (d *dnsManager) remove() error {
 	content, err := os.ReadFile(hostsFile)
 	if err != nil {
 		return fmt.Errorf("reading hosts file: %w", err)
 	}
 
-	cleaned := h.removeBlock(string(content))
+	cleaned := d.removeBlock(string(content))
 
 	if err := os.WriteFile(hostsFile, []byte(cleaned), 0o644); err != nil {
 		return fmt.Errorf("writing hosts file: %w", err)
@@ -67,7 +67,7 @@ func (h *hostsManager) remove() error {
 	return nil
 }
 
-func (h *hostsManager) needsSudo() bool {
+func (d *dnsManager) needsSudo() bool {
 	f, err := os.OpenFile(hostsFile, os.O_WRONLY, 0o644)
 	if err != nil {
 		return true
@@ -76,17 +76,17 @@ func (h *hostsManager) needsSudo() bool {
 	return false
 }
 
-func (h *hostsManager) unresolved(domains []string) []string {
+func (d *dnsManager) unresolved(domains []string) []string {
 	var missing []string
 	for _, domain := range domains {
-		if !h.resolvesToLocalhost(domain) {
+		if !d.resolvesToLocalhost(domain) {
 			missing = append(missing, domain)
 		}
 	}
 	return missing
 }
 
-func (h *hostsManager) resolvesToLocalhost(domain string) bool {
+func (d *dnsManager) resolvesToLocalhost(domain string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), dnsLookupTimeout)
 	defer cancel()
 
@@ -98,27 +98,27 @@ func (h *hostsManager) resolvesToLocalhost(domain string) bool {
 	return slices.Contains(addrs, "127.0.0.1") || slices.Contains(addrs, "::1")
 }
 
-func (h *hostsManager) block(domains []string) string {
+func (d *dnsManager) block(domains []string) string {
 	var b strings.Builder
-	b.WriteString(h.startMarker() + "\n")
+	b.WriteString(d.startMarker() + "\n")
 	for _, domain := range domains {
 		fmt.Fprintf(&b, "127.0.0.1 %s\n", domain)
 	}
-	b.WriteString(h.endMarker())
+	b.WriteString(d.endMarker())
 	return b.String()
 }
 
-func (h *hostsManager) startMarker() string {
-	return fmt.Sprintf("# lokl:%s - START", h.project)
+func (d *dnsManager) startMarker() string {
+	return fmt.Sprintf("# lokl:%s - START", d.project)
 }
 
-func (h *hostsManager) endMarker() string {
-	return fmt.Sprintf("# lokl:%s - END", h.project)
+func (d *dnsManager) endMarker() string {
+	return fmt.Sprintf("# lokl:%s - END", d.project)
 }
 
-func (h *hostsManager) removeBlock(content string) string {
-	startMarker := h.startMarker()
-	endMarker := h.endMarker()
+func (d *dnsManager) removeBlock(content string) string {
+	startMarker := d.startMarker()
+	endMarker := d.endMarker()
 
 	var result strings.Builder
 	scanner := bufio.NewScanner(strings.NewReader(content))

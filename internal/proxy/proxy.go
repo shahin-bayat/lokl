@@ -26,7 +26,7 @@ type Proxy struct {
 	cfg             *config.Config
 	router          *router
 	certs           *certManager
-	hosts           *hostsManager
+	sysDNS          *dnsManager
 	handler         *handler
 	server          *http.Server
 	port            int
@@ -43,7 +43,7 @@ func New(cfg *config.Config) *Proxy {
 		cfg:             cfg,
 		router:          r,
 		certs:           newCertManager(defaultCertDir),
-		hosts:           newHostsManager(cfg.Name),
+		sysDNS:          newDNSManager(cfg.Name),
 		handler:         newHandler(r),
 		port:            defaultPort,
 		hasWildcard:     len(parents) > 0,
@@ -153,7 +153,7 @@ func (p *Proxy) Stop(cleanupDNS bool) error {
 	}
 
 	if cleanupDNS {
-		if err := p.hosts.remove(); err != nil {
+		if err := p.sysDNS.remove(); err != nil {
 			errs = append(errs, fmt.Errorf("removing DNS entries: %w", err))
 		}
 	}
@@ -180,23 +180,23 @@ func (p *Proxy) CertDir() string {
 }
 
 func (p *Proxy) NeedsSudo() bool {
-	return p.hosts.needsSudo()
+	return p.sysDNS.needsSudo()
 }
 
 func (p *Proxy) UnresolvedDomains() []string {
-	return p.hosts.unresolved(p.router.enabledDomains())
+	return p.sysDNS.unresolved(p.router.enabledDomains())
 }
 
 func (p *Proxy) DNSBlock() string {
-	return p.hosts.block(p.router.enabledDomains())
+	return p.sysDNS.block(p.router.enabledDomains())
 }
 
 func (p *Proxy) SetupDNS() error {
-	return p.hosts.add(p.router.enabledDomains())
+	return p.sysDNS.add(p.router.enabledDomains())
 }
 
 func (p *Proxy) RemoveDNS() error {
-	return p.hosts.remove()
+	return p.sysDNS.remove()
 }
 
 func (p *Proxy) EnableServiceProxy(name string) bool {

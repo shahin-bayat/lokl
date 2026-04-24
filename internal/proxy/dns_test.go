@@ -3,7 +3,7 @@ package proxy
 import "testing"
 
 func TestHostsManagerRemoveBlock(t *testing.T) {
-	h := newHostsManager("myproject")
+	h := newDNSManager("myproject")
 
 	tests := []struct {
 		name    string
@@ -76,7 +76,7 @@ func TestHostsManagerRemoveBlock(t *testing.T) {
 }
 
 func TestHostsManagerBlock(t *testing.T) {
-	h := newHostsManager("myproject")
+	h := newDNSManager("myproject")
 
 	got := h.block([]string{"app.example.com", "api.example.com"})
 
@@ -91,7 +91,7 @@ func TestHostsManagerBlock(t *testing.T) {
 }
 
 func TestHostsManagerBlockEmpty(t *testing.T) {
-	h := newHostsManager("myproject")
+	h := newDNSManager("myproject")
 
 	got := h.block(nil)
 	want := "# lokl:myproject - START\n# lokl:myproject - END"
@@ -102,7 +102,7 @@ func TestHostsManagerBlockEmpty(t *testing.T) {
 }
 
 func TestHostsManagerMarkers(t *testing.T) {
-	h := newHostsManager("testproject")
+	h := newDNSManager("testproject")
 
 	if h.startMarker() != "# lokl:testproject - START" {
 		t.Errorf("startMarker() = %q", h.startMarker())
