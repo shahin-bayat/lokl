@@ -36,6 +36,20 @@ func TestStartPortConflict(t *testing.T) {
 	}
 }
 
+func TestWildcardParentsDeterministic(t *testing.T) {
+	cfgA := &config.Config{Services: map[string]config.Service{
+		"w": {Port: 8000, Subdomains: config.Subdomains{"*.b.test", "*.a.test"}},
+	}}
+	cfgB := &config.Config{Services: map[string]config.Service{
+		"w": {Port: 8000, Subdomains: config.Subdomains{"*.a.test", "*.b.test"}},
+	}}
+	a := collectWildcardParents(cfgA)
+	b := collectWildcardParents(cfgB)
+	if !reflect.DeepEqual(a, b) {
+		t.Fatalf("order differs: a=%v b=%v", a, b)
+	}
+}
+
 func TestProxyDetectsWildcard(t *testing.T) {
 	t.Run("no wildcard", func(t *testing.T) {
 		cfg := &config.Config{

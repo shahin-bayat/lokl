@@ -268,6 +268,25 @@ func TestRemoteHost(t *testing.T) {
 	}
 }
 
+func TestInvalidateCacheSuffix(t *testing.T) {
+	h := newHandler(nil)
+	h.dnsCache["acme.sellify.shop"] = "1.2.3.4"
+	h.dnsCache["sellify.shop"] = "5.6.7.8"
+	h.dnsCache["other.test"] = "9.9.9.9"
+
+	h.invalidateCacheSuffix("sellify.shop")
+
+	if _, ok := h.dnsCache["acme.sellify.shop"]; ok {
+		t.Fatal("acme.sellify.shop should be evicted")
+	}
+	if _, ok := h.dnsCache["sellify.shop"]; ok {
+		t.Fatal("sellify.shop should be evicted")
+	}
+	if _, ok := h.dnsCache["other.test"]; !ok {
+		t.Fatal("other.test should remain")
+	}
+}
+
 func TestSelectTargetUsesIPv4Loopback(t *testing.T) {
 	rt := &route{port: 3000}
 	rt.enabled.Store(true)

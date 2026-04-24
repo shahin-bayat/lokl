@@ -435,7 +435,7 @@ func TestRouterSetEnabledTogglesAllRoutesForService(t *testing.T) {
 	}
 }
 
-func TestRouterMatchWildcardDisabled(t *testing.T) {
+func TestRouterMatchDisabledWildcardStillReturnsRoute(t *testing.T) {
 	cfg := &config.Config{
 		Services: map[string]config.Service{
 			"web": {Port: 8000, Subdomains: config.Subdomains{"*.sellify.shop"}},
@@ -443,7 +443,11 @@ func TestRouterMatchWildcardDisabled(t *testing.T) {
 	}
 	r := newRouter(cfg)
 	r.wildcards[0].enabled.Store(false)
-	if rt := r.match("foo.sellify.shop", "/"); rt != nil {
-		t.Fatalf("disabled wildcard matched: %q", rt.name)
+	rt := r.match("foo.sellify.shop", "/")
+	if rt == nil {
+		t.Fatal("disabled wildcard should still match; selectTarget decides local vs remote")
+	}
+	if rt.enabled.Load() {
+		t.Fatal("matched route should be disabled")
 	}
 }

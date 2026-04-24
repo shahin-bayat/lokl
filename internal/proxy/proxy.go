@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -163,6 +164,7 @@ func collectWildcardParents(cfg *config.Config) []string {
 			parents = append(parents, after)
 		}
 	}
+	sort.Strings(parents)
 	return parents
 }
 
@@ -242,14 +244,22 @@ func (p *Proxy) WildcardParentCount() int {
 
 func (p *Proxy) EnableServiceProxy(name string) bool {
 	for _, rt := range p.router.routesFor(name) {
-		p.handler.invalidateCache(rt.domain)
+		if rt.parent != "" {
+			p.handler.invalidateCacheSuffix(rt.parent)
+		} else {
+			p.handler.invalidateCache(rt.domain)
+		}
 	}
 	return p.router.setEnabled(name, true)
 }
 
 func (p *Proxy) DisableServiceProxy(name string) bool {
 	for _, rt := range p.router.routesFor(name) {
-		p.handler.invalidateCache(rt.domain)
+		if rt.parent != "" {
+			p.handler.invalidateCacheSuffix(rt.parent)
+		} else {
+			p.handler.invalidateCache(rt.domain)
+		}
 	}
 	return p.router.setEnabled(name, false)
 }

@@ -98,9 +98,6 @@ func (r *router) match(host, path string) *route {
 	}
 
 	for _, rt := range r.wildcards {
-		if !rt.enabled.Load() {
-			continue
-		}
 		if wildcardMatches(host, rt.parent) {
 			return selectByPath(wildcardsWithParent(r.wildcards, rt.parent), path)
 		}

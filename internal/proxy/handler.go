@@ -94,6 +94,18 @@ func (h *handler) invalidateCache(domain string) {
 	h.dnsMu.Unlock()
 }
 
+// invalidateCacheSuffix clears every cached host equal to parent or under it.
+// Wildcard routes cache by concrete request host, so exact-key invalidation misses them.
+func (h *handler) invalidateCacheSuffix(parent string) {
+	h.dnsMu.Lock()
+	defer h.dnsMu.Unlock()
+	for host := range h.dnsCache {
+		if host == parent || strings.HasSuffix(host, "."+parent) {
+			delete(h.dnsCache, host)
+		}
+	}
+}
+
 func (h *handler) selectTarget(rt *route, r *http.Request) (target *url.URL, transport http.RoundTripper, remote bool, err error) {
 	if rt.enabled.Load() {
 		if rt.rewrite != nil {
