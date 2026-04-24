@@ -55,6 +55,9 @@ func checkDuplicatePorts(services map[string]Service) error {
 	}
 
 	for name, svc := range services {
+		if svc.ProxyOnly {
+			continue // forwards to a port rather than claiming it
+		}
 		if err := register(name, svc.Port); err != nil {
 			return err
 		}
@@ -72,6 +75,10 @@ func checkDuplicatePorts(services map[string]Service) error {
 }
 
 func validateService(name string, svc *Service, services map[string]Service) error {
+	if svc.ProxyOnly {
+		return validateProxyOnlyService(name, svc)
+	}
+
 	hasCommand := svc.Command.IsSet()
 	hasImage := svc.Image != ""
 
@@ -255,6 +262,45 @@ func checkDuplicateSubdomains(cfg *Config) error {
 var reservedWildcardParents = map[string]struct{}{
 	"com": {}, "org": {}, "net": {},
 	"local": {}, "localhost": {}, "test": {},
+}
+
+func validateProxyOnlyService(name string, svc *Service) error {
+	if svc.Command.IsSet() || svc.Image != "" {
+		return fmt.Errorf("service %q: proxy_only cannot be combined with command or image", name)
+	}
+	if len(svc.Ports) > 0 || len(svc.Volumes) > 0 || len(svc.Env) > 0 || len(svc.EnvFile) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare ports, volumes, env, or env_file", name)
+	}
+	if svc.AutoStart != nil || svc.Restart != "" || svc.ReadyTimeout != "" || svc.Limits != nil {
+		return fmt.Errorf("service %q: autostart, restart, ready_timeout, and limits are not supported for proxy_only", name)
+	}
+	if svc.Port == 0 {
+		return fmt.Errorf("service %q: proxy_only requires port", name)
+	}
+	if len(svc.Subdomains) == 0 {
+		return fmt.Errorf("service %q: proxy_only requires subdomain", name)
+	}
+	if svc.Health != nil && svc.Health.Command.IsSet() {
+		return fmt.Errorf("service %q: health.command is not supported for proxy_only", name)
+	}
+
+	seen := map[string]struct{}{}
+	for _, sd := range svc.Subdomains {
+		if _, dup := seen[sd]; dup {
+			return fmt.Errorf("service %q: duplicate subdomain %q", name, sd)
+		}
+		seen[sd] = struct{}{}
+		if after, isWild := strings.CutPrefix(sd, "*."); isWild {
+			if err := validateWildcardParent(after); err != nil {
+				return fmt.Errorf("service %q: subdomain %q: %w", name, sd, err)
+			}
+			continue
+		}
+		if strings.Contains(sd, "*") {
+			return fmt.Errorf("service %q: invalid subdomain %q", name, sd)
+		}
+	}
+	return nil
 }
 
 func validateWildcardParent(parent string) error {
