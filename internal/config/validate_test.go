@@ -161,3 +161,82 @@ func TestProxyOnlyDoesNotTripDuplicatePorts(t *testing.T) {
 		t.Fatalf("proxy-only should not collide with published port: %v", err)
 	}
 }
+
+func TestValidateProxyOnlyRejectsEveryForbiddenField(t *testing.T) {
+	base := func() Service {
+		return Service{ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"console"}}
+	}
+	t.Run("reject ports", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Ports = []string{"9001:9001"}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on ports")
+		}
+	})
+	t.Run("reject env", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Env = map[string]string{"FOO": "bar"}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on env")
+		}
+	})
+	t.Run("reject env_file", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.EnvFile = []string{".env"}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on env_file")
+		}
+	})
+	t.Run("reject autostart", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		trueVal := true
+		svc.AutoStart = &trueVal
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on autostart")
+		}
+	})
+	t.Run("reject restart", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Restart = "always"
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on restart")
+		}
+	})
+	t.Run("reject ready_timeout", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.ReadyTimeout = "5s"
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on ready_timeout")
+		}
+	})
+	t.Run("reject limits", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Limits = &LimitsConfig{}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on limits")
+		}
+	})
+	t.Run("reject bare asterisk subdomain", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Subdomains = Subdomains{"*"}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on bare asterisk subdomain")
+		}
+	})
+}

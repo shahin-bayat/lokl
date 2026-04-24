@@ -98,22 +98,8 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		return fmt.Errorf("service %q: port is required when subdomain is set", name)
 	}
 
-	seen := map[string]struct{}{}
-	for _, sd := range svc.Subdomains {
-		if _, dup := seen[sd]; dup {
-			return fmt.Errorf("service %q: duplicate subdomain %q", name, sd)
-		}
-		seen[sd] = struct{}{}
-
-		if after, isWild := strings.CutPrefix(sd, "*."); isWild {
-			if err := validateWildcardParent(after); err != nil {
-				return fmt.Errorf("service %q: subdomain %q: %w", name, sd, err)
-			}
-			continue
-		}
-		if strings.Contains(sd, "*") {
-			return fmt.Errorf("service %q: invalid subdomain %q", name, sd)
-		}
+	if err := validateSubdomainsOnService(name, svc.Subdomains); err != nil {
+		return err
 	}
 
 	if svc.Health != nil && svc.Health.Path != "" && svc.Port == 0 {
@@ -268,11 +254,29 @@ func validateProxyOnlyService(name string, svc *Service) error {
 	if svc.Command.IsSet() || svc.Image != "" {
 		return fmt.Errorf("service %q: proxy_only cannot be combined with command or image", name)
 	}
-	if len(svc.Ports) > 0 || len(svc.Volumes) > 0 || len(svc.Env) > 0 || len(svc.EnvFile) > 0 {
-		return fmt.Errorf("service %q: proxy_only cannot declare ports, volumes, env, or env_file", name)
+	if len(svc.Ports) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare ports", name)
 	}
-	if svc.AutoStart != nil || svc.Restart != "" || svc.ReadyTimeout != "" || svc.Limits != nil {
-		return fmt.Errorf("service %q: autostart, restart, ready_timeout, and limits are not supported for proxy_only", name)
+	if len(svc.Volumes) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare volumes", name)
+	}
+	if len(svc.Env) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare env", name)
+	}
+	if len(svc.EnvFile) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare env_file", name)
+	}
+	if svc.AutoStart != nil {
+		return fmt.Errorf("service %q: autostart is not supported for proxy_only", name)
+	}
+	if svc.Restart != "" {
+		return fmt.Errorf("service %q: restart is not supported for proxy_only", name)
+	}
+	if svc.ReadyTimeout != "" {
+		return fmt.Errorf("service %q: ready_timeout is not supported for proxy_only", name)
+	}
+	if svc.Limits != nil {
+		return fmt.Errorf("service %q: limits is not supported for proxy_only", name)
 	}
 	if svc.Port == 0 {
 		return fmt.Errorf("service %q: proxy_only requires port", name)
@@ -284,8 +288,15 @@ func validateProxyOnlyService(name string, svc *Service) error {
 		return fmt.Errorf("service %q: health.command is not supported for proxy_only", name)
 	}
 
+	return validateSubdomainsOnService(name, svc.Subdomains)
+}
+
+// validateSubdomainsOnService runs per-service subdomain checks (shape,
+// reserved parents, duplicates) that apply equally to normal and proxy_only
+// services.
+func validateSubdomainsOnService(name string, subdomains []string) error {
 	seen := map[string]struct{}{}
-	for _, sd := range svc.Subdomains {
+	for _, sd := range subdomains {
 		if _, dup := seen[sd]; dup {
 			return fmt.Errorf("service %q: duplicate subdomain %q", name, sd)
 		}
