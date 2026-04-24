@@ -377,3 +377,51 @@ func TestRouterWildcardSortByParentLength(t *testing.T) {
 		t.Fatalf("wildcards[0].parent=%q, want longer parent first", r.wildcards[0].parent)
 	}
 }
+
+func TestRouterMatchWildcard(t *testing.T) {
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			"web":      {Port: 8000, Subdomains: config.Subdomains{"sellify.shop", "*.sellify.shop"}},
+			"api":      {Port: 9000, Subdomains: config.Subdomains{"api.sellify.shop"}},
+			"api-deep": {Port: 9100, Subdomains: config.Subdomains{"*.api.sellify.shop"}},
+		},
+	}
+	r := newRouter(cfg)
+
+	cases := []struct {
+		host, want string
+	}{
+		{"sellify.shop", "web"},
+		{"api.sellify.shop", "api"},
+		{"foo.sellify.shop", "web"},
+		{"a.b.sellify.shop", "web"},
+		{"deep.api.sellify.shop", "api-deep"},
+		{"evil-sellify.shop", ""},
+		{"sellify.shop.attacker.com", ""},
+		{"nope.other.test", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.host, func(t *testing.T) {
+			got := ""
+			if rt := r.match(tc.host, "/"); rt != nil {
+				got = rt.name
+			}
+			if got != tc.want {
+				t.Fatalf("match(%q)=%q want %q", tc.host, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRouterMatchWildcardDisabled(t *testing.T) {
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			"web": {Port: 8000, Subdomains: config.Subdomains{"*.sellify.shop"}},
+		},
+	}
+	r := newRouter(cfg)
+	r.wildcards[0].enabled.Store(false)
+	if rt := r.match("foo.sellify.shop", "/"); rt != nil {
+		t.Fatalf("disabled wildcard matched: %q", rt.name)
+	}
+}

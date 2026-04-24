@@ -93,14 +93,49 @@ func (r *router) match(host, path string) *route {
 		host = host[:idx]
 	}
 
-	routes := r.byHost[host]
-	if len(routes) == 0 {
-		return nil
+	if routes := r.byHost[host]; len(routes) > 0 {
+		return selectByPath(routes, path)
 	}
+
+	for _, rt := range r.wildcards {
+		if !rt.enabled.Load() {
+			continue
+		}
+		if wildcardMatches(host, rt.parent) {
+			return selectByPath(wildcardsWithParent(r.wildcards, rt.parent), path)
+		}
+	}
+	return nil
+}
+
+// wildcardMatches enforces a dot boundary so evil-sellify.shop does not match *.sellify.shop.
+func wildcardMatches(host, parent string) bool {
+	prefix, ok := strings.CutSuffix(host, "."+parent)
+	if !ok || prefix == "" {
+		return false
+	}
+	for _, label := range strings.Split(prefix, ".") {
+		if label == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func wildcardsWithParent(all []*route, parent string) []*route {
+	out := make([]*route, 0, 1)
+	for _, rt := range all {
+		if rt.parent == parent {
+			out = append(out, rt)
+		}
+	}
+	return out
+}
+
+func selectByPath(routes []*route, path string) *route {
 	if len(routes) == 1 {
 		return routes[0]
 	}
-
 	for _, rt := range routes {
 		if rt.rewrite != nil && rt.rewrite.stripPrefix != "" {
 			prefix := "/" + rt.rewrite.stripPrefix
@@ -109,13 +144,11 @@ func (r *router) match(host, path string) *route {
 			}
 		}
 	}
-
 	for _, rt := range routes {
 		if rt.rewrite == nil || rt.rewrite.stripPrefix == "" {
 			return rt
 		}
 	}
-
 	return nil
 }
 
