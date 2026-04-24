@@ -32,6 +32,7 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	// Run after per-service validation so duplicate detection sees only well-formed subdomains.
 	if err := checkDuplicateSubdomains(cfg); err != nil {
 		return err
 	}
@@ -103,7 +104,7 @@ func validateService(name string, svc *Service, services map[string]Service) err
 			}
 			continue
 		}
-		if strings.ContainsAny(sd, "*") {
+		if strings.Contains(sd, "*") {
 			return fmt.Errorf("service %q: invalid subdomain %q", name, sd)
 		}
 	}
