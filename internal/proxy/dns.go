@@ -144,12 +144,84 @@ func (d *dnsManager) MissingWildcardParents() []string {
 
 func (d *dnsManager) unresolved(domains []string) []string {
 	var missing []string
+
+	// Parse our hosts block once; used as the fallback oracle when LookupHost
+	// can't work (see coveredByInstalledWildcard).
+	blockHosts := d.currentBlockHosts()
+
 	for _, domain := range domains {
+		if d.coveredByInstalledWildcard(domain) {
+			if _, ok := blockHosts[domain]; ok {
+				continue
+			}
+			missing = append(missing, domain)
+			continue
+		}
 		if !d.resolvesToLocalhost(domain) {
 			missing = append(missing, domain)
 		}
 	}
 	return missing
+}
+
+// coveredByInstalledWildcard reports whether domain is under a wildcard parent
+// whose resolver file is installed. Such hosts cannot be probed via LookupHost
+// on macOS because the resolver file routes the whole zone to our DNS listener,
+// which is not running during pre-flight readiness checks.
+func (d *dnsManager) coveredByInstalledWildcard(domain string) bool {
+	if len(d.wildcardParents) == 0 || d.resolver == nil {
+		return false
+	}
+	missing := map[string]struct{}{}
+	for _, p := range d.resolver.Missing(d.wildcardParents) {
+		missing[p] = struct{}{}
+	}
+	for _, parent := range d.wildcardParents {
+		if _, isMissing := missing[parent]; isMissing {
+			continue
+		}
+		if domain == parent || strings.HasSuffix(domain, "."+parent) {
+			return true
+		}
+	}
+	return false
+}
+
+// currentBlockHosts returns the set of hostnames currently present in our
+// project's /etc/hosts block.
+func (d *dnsManager) currentBlockHosts() map[string]struct{} {
+	out := map[string]struct{}{}
+	content, err := os.ReadFile(d.hostsPathOrDefault())
+	if err != nil {
+		return out
+	}
+	startMarker := d.startMarker()
+	endMarker := d.endMarker()
+
+	scanner := bufio.NewScanner(strings.NewReader(string(content)))
+	inBlock := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == startMarker {
+			inBlock = true
+			continue
+		}
+		if line == endMarker {
+			inBlock = false
+			continue
+		}
+		if !inBlock {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		for _, host := range fields[1:] {
+			out[host] = struct{}{}
+		}
+	}
+	return out
 }
 
 func (d *dnsManager) resolvesToLocalhost(domain string) bool {

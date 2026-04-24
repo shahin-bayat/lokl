@@ -137,6 +137,47 @@ func TestSetupDoesNotWriteHostsWhenResolverFails(t *testing.T) {
 	}
 }
 
+func TestUnresolvedTrustsHostsBlockWhenWildcardResolverInstalled(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	seed := `# lokl:demo - START
+127.0.0.1 sellify.shop
+127.0.0.1 s3.sellify.shop
+# lokl:demo - END
+`
+	if err := os.WriteFile(hostsPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := &dnsManager{
+		project:         "demo",
+		hostsPath:       hostsPath,
+		wildcardParents: []string{"sellify.shop"},
+		resolver:        &fakeResolver{missing: nil},
+	}
+	got := d.unresolved([]string{"sellify.shop", "s3.sellify.shop"})
+	if len(got) != 0 {
+		t.Fatalf("unresolved should be empty when hosts block has entries and resolver installed; got %v", got)
+	}
+}
+
+func TestUnresolvedReportsHostsMissingUnderInstalledWildcard(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte("# lokl:demo - START\n# lokl:demo - END\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := &dnsManager{
+		project:         "demo",
+		hostsPath:       hostsPath,
+		wildcardParents: []string{"sellify.shop"},
+		resolver:        &fakeResolver{missing: nil},
+	}
+	got := d.unresolved([]string{"sellify.shop"})
+	if len(got) != 1 || got[0] != "sellify.shop" {
+		t.Fatalf("want [sellify.shop], got %v", got)
+	}
+}
+
 func TestHostsManagerRemoveBlock(t *testing.T) {
 	h := newDNSManager("myproject", nil, 0)
 
