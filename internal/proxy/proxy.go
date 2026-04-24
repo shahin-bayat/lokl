@@ -237,23 +237,30 @@ func (p *Proxy) WildcardParentCount() int {
 }
 
 func (p *Proxy) EnableServiceProxy(name string) bool {
-	if rt := p.router.byName[name]; rt != nil {
+	for _, rt := range p.router.routesFor(name) {
 		p.handler.invalidateCache(rt.domain)
 	}
 	return p.router.setEnabled(name, true)
 }
 
 func (p *Proxy) DisableServiceProxy(name string) bool {
-	if rt := p.router.byName[name]; rt != nil {
+	for _, rt := range p.router.routesFor(name) {
 		p.handler.invalidateCache(rt.domain)
 	}
 	return p.router.setEnabled(name, false)
 }
 
+// IsServiceProxyEnabled returns true if ANY route owned by the service is enabled;
+// matches prior behavior where the single-route map tracked one route's flag.
 func (p *Proxy) IsServiceProxyEnabled(name string) bool {
-	rt := p.router.byName[name]
-	if rt == nil {
+	routes := p.router.routesFor(name)
+	if len(routes) == 0 {
 		return false
 	}
-	return rt.enabled.Load()
+	for _, rt := range routes {
+		if rt.enabled.Load() {
+			return true
+		}
+	}
+	return false
 }

@@ -25,7 +25,7 @@ type rewriteConfig struct {
 type router struct {
 	baseDomain string
 	byHost     map[string][]*route
-	byName     map[string]*route
+	byName     map[string][]*route
 	wildcards  []*route
 }
 
@@ -33,7 +33,7 @@ func newRouter(cfg *config.Config) *router {
 	r := &router{
 		baseDomain: cfg.Proxy.Domain,
 		byHost:     make(map[string][]*route),
-		byName:     make(map[string]*route),
+		byName:     make(map[string][]*route),
 	}
 
 	for name, svc := range cfg.Services {
@@ -70,7 +70,7 @@ func newRouter(cfg *config.Config) *router {
 			} else {
 				r.byHost[fqdn] = append(r.byHost[fqdn], rt)
 			}
-			r.byName[name] = rt
+			r.byName[name] = append(r.byName[name], rt)
 		}
 	}
 
@@ -180,12 +180,18 @@ func (r *router) domain() string {
 }
 
 func (r *router) setEnabled(name string, enabled bool) bool {
-	rt, ok := r.byName[name]
-	if !ok {
+	routes, ok := r.byName[name]
+	if !ok || len(routes) == 0 {
 		return false
 	}
-	rt.enabled.Store(enabled)
+	for _, rt := range routes {
+		rt.enabled.Store(enabled)
+	}
 	return true
+}
+
+func (r *router) routesFor(name string) []*route {
+	return r.byName[name]
 }
 
 func prefixLen(rt *route) int {

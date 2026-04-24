@@ -413,6 +413,28 @@ func TestRouterMatchWildcard(t *testing.T) {
 	}
 }
 
+func TestRouterSetEnabledTogglesAllRoutesForService(t *testing.T) {
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			"web": {Port: 8000, Subdomains: config.Subdomains{"sellify.shop", "*.sellify.shop"}},
+		},
+	}
+	r := newRouter(cfg)
+	if ok := r.setEnabled("web", false); !ok {
+		t.Fatal("setEnabled should return true for known service")
+	}
+	for _, rt := range r.byHost["sellify.shop"] {
+		if rt.enabled.Load() {
+			t.Fatal("exact apex route should be disabled")
+		}
+	}
+	for _, rt := range r.wildcards {
+		if rt.enabled.Load() {
+			t.Fatal("wildcard route should be disabled")
+		}
+	}
+}
+
 func TestRouterMatchWildcardDisabled(t *testing.T) {
 	cfg := &config.Config{
 		Services: map[string]config.Service{
