@@ -27,7 +27,9 @@ type Runner struct {
 	name     string
 	svc      config.Service
 	onChange func()
-	onCrash  func()
+	// onCrash is kept for factory-signature parity with process/docker runners;
+	// proxy-only services have no process, so it's never invoked.
+	onCrash func()
 
 	mu      sync.Mutex
 	running bool
