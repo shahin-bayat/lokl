@@ -48,16 +48,22 @@ func (d *dnsManager) hostsPathOrDefault() string {
 }
 
 func (d *dnsManager) Setup(exactDomains []string) error {
+	// Install resolver files first — the riskier step — so a failure doesn't leave
+	// /etc/hosts partially mutated.
+	if len(d.wildcardParents) > 0 {
+		if err := d.resolver.Write(d.wildcardParents); err != nil {
+			return fmt.Errorf("writing resolver files: %w", err)
+		}
+	}
 	if err := d.add(exactDomains); err != nil {
+		if len(d.wildcardParents) > 0 {
+			_ = d.resolver.Remove(d.wildcardParents)
+		}
 		return err
 	}
-	if len(d.wildcardParents) == 0 {
-		return nil
+	if len(d.wildcardParents) > 0 {
+		_ = d.resolver.FlushCache()
 	}
-	if err := d.resolver.Write(d.wildcardParents); err != nil {
-		return fmt.Errorf("writing resolver files: %w", err)
-	}
-	_ = d.resolver.FlushCache()
 	return nil
 }
 

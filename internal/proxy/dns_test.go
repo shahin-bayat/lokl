@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -108,6 +109,31 @@ func TestMissingWildcardParentsEmptyWithoutWildcards(t *testing.T) {
 	d := &dnsManager{project: "demo", resolver: fr}
 	if got := d.MissingWildcardParents(); len(got) != 0 {
 		t.Fatalf("got=%v want nil", got)
+	}
+}
+
+type failingResolver struct{ fakeResolver }
+
+func (f *failingResolver) Write(p []string) error { return errors.New("boom") }
+
+func TestSetupDoesNotWriteHostsWhenResolverFails(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte("original\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := &dnsManager{
+		project:         "demo",
+		hostsPath:       hostsPath,
+		resolver:        &failingResolver{},
+		wildcardParents: []string{"sellify.shop"},
+	}
+	if err := d.Setup([]string{"api.test"}); err == nil {
+		t.Fatal("Setup must error when resolver fails")
+	}
+	b, _ := os.ReadFile(hostsPath)
+	if string(b) != "original\n" {
+		t.Fatalf("hosts should be untouched when resolver fails; got %q", b)
 	}
 }
 
