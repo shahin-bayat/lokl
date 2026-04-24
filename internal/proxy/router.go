@@ -80,7 +80,8 @@ func newRouter(cfg *config.Config) *router {
 		})
 	}
 
-	sort.Slice(r.wildcards, func(i, j int) bool {
+	// Longest parent first so nested wildcards (e.g. *.api.x.test) win over *.x.test during match.
+	sort.SliceStable(r.wildcards, func(i, j int) bool {
 		return len(r.wildcards[i].parent) > len(r.wildcards[j].parent)
 	})
 
