@@ -26,14 +26,14 @@ func validate(cfg *Config) error {
 		return err
 	}
 
-	if err := checkDuplicateSubdomains(cfg); err != nil {
-		return err
-	}
-
 	for name, svc := range cfg.Services {
 		if err := validateService(name, &svc, cfg.Services); err != nil {
 			return err
 		}
+	}
+
+	if err := checkDuplicateSubdomains(cfg); err != nil {
+		return err
 	}
 
 	return nil
@@ -88,6 +88,24 @@ func validateService(name string, svc *Service, services map[string]Service) err
 
 	if len(svc.Subdomains) > 0 && svc.Port == 0 {
 		return fmt.Errorf("service %q: port is required when subdomain is set", name)
+	}
+
+	seen := map[string]struct{}{}
+	for _, sd := range svc.Subdomains {
+		if _, dup := seen[sd]; dup {
+			return fmt.Errorf("service %q: duplicate subdomain %q", name, sd)
+		}
+		seen[sd] = struct{}{}
+
+		if after, isWild := strings.CutPrefix(sd, "*."); isWild {
+			if err := validateWildcardParent(after); err != nil {
+				return fmt.Errorf("service %q: subdomain %q: %w", name, sd, err)
+			}
+			continue
+		}
+		if strings.ContainsAny(sd, "*") {
+			return fmt.Errorf("service %q: invalid subdomain %q", name, sd)
+		}
 	}
 
 	if svc.Health != nil && svc.Health.Path != "" && svc.Port == 0 {
@@ -228,6 +246,30 @@ func checkDuplicateSubdomains(cfg *Config) error {
 					existing, name, prefix)
 			}
 			seen[k] = name
+		}
+	}
+	return nil
+}
+
+var reservedWildcardParents = map[string]struct{}{
+	"com": {}, "org": {}, "net": {},
+	"local": {}, "localhost": {}, "test": {},
+}
+
+func validateWildcardParent(parent string) error {
+	if parent == "" {
+		return fmt.Errorf("wildcard must have a parent domain")
+	}
+	if _, reserved := reservedWildcardParents[parent]; reserved {
+		return fmt.Errorf("reserved wildcard parent %q", parent)
+	}
+	labels := strings.Split(parent, ".")
+	if len(labels) < 2 {
+		return fmt.Errorf("wildcard parent must have at least two labels")
+	}
+	for _, l := range labels {
+		if l == "" || strings.Contains(l, "*") {
+			return fmt.Errorf("invalid wildcard parent %q", parent)
 		}
 	}
 	return nil
