@@ -108,7 +108,7 @@ services:
 ### Limits
 
 - `*` must be the leftmost label: `"*.x.y"` is valid; `"a.*.y"` and `"*"` are not.
-- Reserved parents (`*.com`, `*.local`, `*.test`, `*.localhost`) are rejected.
+- Reserved parents (`*.com`, `*.org`, `*.net`, `*.local`, `*.test`, `*.localhost`) are rejected.
 - macOS only for now. Linux support (systemd-resolved) lands in a follow-up release.
 
 ## Toggle Proxy
