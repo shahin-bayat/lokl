@@ -157,6 +157,7 @@ func (r *router) domains() []string {
 	for domain := range r.byHost {
 		domains = append(domains, domain)
 	}
+	sort.Strings(domains)
 	return domains
 }
 
@@ -170,6 +171,7 @@ func (r *router) enabledDomains() []string {
 			}
 		}
 	}
+	sort.Strings(domains)
 	return domains
 }
 
