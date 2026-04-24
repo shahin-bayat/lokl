@@ -56,6 +56,22 @@ func TestDNSServerAnswers(t *testing.T) {
 	}
 }
 
+func TestDNSServerRefusesParentApex(t *testing.T) {
+	srv, addr := startTestDNSServer(t, []string{"sellify.shop"})
+	t.Cleanup(func() { _ = srv.Shutdown() })
+
+	m := new(dns.Msg)
+	m.SetQuestion("sellify.shop.", dns.TypeA)
+	c := &dns.Client{Net: "udp", Timeout: 500 * time.Millisecond}
+	resp, _, err := c.Exchange(m, addr)
+	if err != nil {
+		t.Fatalf("exchange: %v", err)
+	}
+	if resp.Rcode != dns.RcodeRefused {
+		t.Fatalf("apex must be REFUSED, got rcode=%d", resp.Rcode)
+	}
+}
+
 func startTestDNSServer(t *testing.T, parents []string) (*dnsServer, string) {
 	t.Helper()
 	srv, err := newDNSServer("127.0.0.1:0", parents)

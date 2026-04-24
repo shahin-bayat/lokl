@@ -110,11 +110,14 @@ func (s *dnsServer) handle(w dns.ResponseWriter, req *dns.Msg) {
 	_ = w.WriteMsg(resp)
 }
 
-// inScope reports whether name equals a known parent or is one of its subdomains.
+// inScope reports whether name is a subdomain of a known wildcard parent.
+// The bare parent (apex) is intentionally refused: apex hosts are served via
+// /etc/hosts when explicitly declared, and answering the apex here would steal
+// traffic meant for the real domain when only wildcards are declared.
 func (s *dnsServer) inScope(name string) bool {
 	for _, parent := range s.parents {
 		if name == parent {
-			return true
+			continue
 		}
 		if strings.HasSuffix(name, "."+parent) {
 			return true
