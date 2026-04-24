@@ -53,8 +53,8 @@ func New(cfg *config.Config) *Proxy {
 }
 
 func (p *Proxy) Setup() error {
-	domain := p.router.domain()
-	if domain == "" {
+	primary, sans := p.certDomains()
+	if primary == "" {
 		return fmt.Errorf("no proxy domain configured")
 	}
 
@@ -62,11 +62,44 @@ func (p *Proxy) Setup() error {
 		return fmt.Errorf("setting up CA: %w", err)
 	}
 
-	if _, _, err := p.certs.generate(domain); err != nil {
+	if _, _, err := p.certs.generate(primary, sans); err != nil {
 		return fmt.Errorf("generating certificate: %w", err)
 	}
 
 	return nil
+}
+
+// certDomains returns the primary cert name and the full SAN list, deduped and ordered
+// so base-domain-only configs produce the same output as before wildcard support.
+func (p *Proxy) certDomains() (string, []string) {
+	primary := p.router.domain()
+	seen := map[string]struct{}{}
+	var sans []string
+	add := func(s string) {
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		sans = append(sans, s)
+	}
+	if primary != "" {
+		add("*." + primary)
+		add(primary)
+	}
+	for _, parent := range p.wildcardParents {
+		add("*." + parent)
+		add(parent)
+	}
+	for _, d := range p.router.domains() {
+		add(d)
+	}
+	if primary == "" && len(p.wildcardParents) > 0 {
+		primary = p.wildcardParents[0]
+	}
+	return primary, sans
 }
 
 func (p *Proxy) Start() error {
@@ -76,6 +109,9 @@ func (p *Proxy) Start() error {
 	}
 
 	domain := p.router.domain()
+	if domain == "" && len(p.wildcardParents) > 0 {
+		domain = p.wildcardParents[0]
+	}
 	cert, err := tls.LoadX509KeyPair(p.certs.certPath(domain), p.certs.keyPath(domain))
 	if err != nil {
 		_ = ln.Close()

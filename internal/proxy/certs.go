@@ -28,7 +28,7 @@ func (c *certManager) ensureCA() error {
 	return nil
 }
 
-func (c *certManager) generate(domain string) (certPath, keyPath string, err error) {
+func (c *certManager) generate(primary string, sans []string) (certPath, keyPath string, err error) {
 	if err := c.checkMkcert(); err != nil {
 		return "", "", err
 	}
@@ -37,19 +37,17 @@ func (c *certManager) generate(domain string) (certPath, keyPath string, err err
 		return "", "", fmt.Errorf("creating cert directory: %w", err)
 	}
 
-	certPath = c.certPath(domain)
-	keyPath = c.keyPath(domain)
+	certPath = c.certPath(primary)
+	keyPath = c.keyPath(primary)
 
 	if fileExists(certPath) && fileExists(keyPath) {
 		return certPath, keyPath, nil
 	}
 
-	wildcard := "*." + domain
-	out, err := exec.Command("mkcert",
-		"-cert-file", certPath,
-		"-key-file", keyPath,
-		wildcard, domain,
-	).CombinedOutput()
+	args := []string{"-cert-file", certPath, "-key-file", keyPath}
+	args = append(args, sans...)
+
+	out, err := exec.Command("mkcert", args...).CombinedOutput()
 	if err != nil {
 		return "", "", fmt.Errorf("generating certificate: %s: %w", out, err)
 	}
