@@ -163,6 +163,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "r":
 		if svc := m.selectedService(); svc != nil {
+			if svc.ProxyOnly {
+				m.copyMsg = "proxy-only services have no process to restart"
+				m.copyExpiry = time.Now().Add(copyFlashDuration)
+				return m, copyFlashTimeout()
+			}
 			_ = m.controller.RestartService(svc.Name)
 		}
 

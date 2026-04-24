@@ -196,8 +196,9 @@ func (s *Supervisor) Services() []types.ServiceInfo {
 	for _, name := range sorted {
 		svc := s.cfg.Services[name]
 		item := types.ServiceInfo{
-			Name: name,
-			Port: svc.Port,
+			Name:      name,
+			Port:      svc.Port,
+			ProxyOnly: svc.ProxyOnly,
 		}
 
 		if domain := s.primaryDomain(svc); domain != "" {
