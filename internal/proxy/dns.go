@@ -16,12 +16,61 @@ const (
 	dnsLookupTimeout = 2 * time.Second
 )
 
-type dnsManager struct {
-	project string
+type resolverWriter interface {
+	Write(parents []string) error
+	Remove(parents []string) error
+	FlushCache() error
 }
 
-func newDNSManager(project string) *dnsManager {
-	return &dnsManager{project: project}
+type dnsManager struct {
+	project         string
+	wildcardParents []string
+	resolver        resolverWriter
+	// hostsPath overrides the system hosts file in tests; empty means use hostsFile.
+	hostsPath string
+}
+
+func newDNSManager(project string, wildcardParents []string, dnsPort int) *dnsManager {
+	return &dnsManager{
+		project:         project,
+		wildcardParents: wildcardParents,
+		resolver:        newResolverDir(dnsPort),
+	}
+}
+
+func (d *dnsManager) hostsPathOrDefault() string {
+	if d.hostsPath != "" {
+		return d.hostsPath
+	}
+	return hostsFile
+}
+
+func (d *dnsManager) Setup(exactDomains []string) error {
+	if err := d.add(exactDomains); err != nil {
+		return err
+	}
+	if len(d.wildcardParents) == 0 {
+		return nil
+	}
+	if err := d.resolver.Write(d.wildcardParents); err != nil {
+		return fmt.Errorf("writing resolver files: %w", err)
+	}
+	_ = d.resolver.FlushCache()
+	return nil
+}
+
+func (d *dnsManager) Remove() error {
+	if err := d.remove(); err != nil {
+		return err
+	}
+	if len(d.wildcardParents) == 0 {
+		return nil
+	}
+	if err := d.resolver.Remove(d.wildcardParents); err != nil {
+		return fmt.Errorf("removing resolver files: %w", err)
+	}
+	_ = d.resolver.FlushCache()
+	return nil
 }
 
 func (d *dnsManager) add(domains []string) error {
@@ -29,7 +78,8 @@ func (d *dnsManager) add(domains []string) error {
 		return nil
 	}
 
-	content, err := os.ReadFile(hostsFile)
+	path := d.hostsPathOrDefault()
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading hosts file: %w", err)
 	}
@@ -45,7 +95,7 @@ func (d *dnsManager) add(domains []string) error {
 
 	newContent := strings.TrimRight(cleaned, "\n") + "\n\n" + block.String()
 
-	if err := os.WriteFile(hostsFile, []byte(newContent), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
 		return fmt.Errorf("writing hosts file: %w", err)
 	}
 
@@ -53,14 +103,15 @@ func (d *dnsManager) add(domains []string) error {
 }
 
 func (d *dnsManager) remove() error {
-	content, err := os.ReadFile(hostsFile)
+	path := d.hostsPathOrDefault()
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading hosts file: %w", err)
 	}
 
 	cleaned := d.removeBlock(string(content))
 
-	if err := os.WriteFile(hostsFile, []byte(cleaned), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(cleaned), 0o644); err != nil {
 		return fmt.Errorf("writing hosts file: %w", err)
 	}
 
@@ -68,7 +119,7 @@ func (d *dnsManager) remove() error {
 }
 
 func (d *dnsManager) needsSudo() bool {
-	f, err := os.OpenFile(hostsFile, os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(d.hostsPathOrDefault(), os.O_WRONLY, 0o644)
 	if err != nil {
 		return true
 	}

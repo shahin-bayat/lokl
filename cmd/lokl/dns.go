@@ -58,6 +58,9 @@ func runDNSSetup(cmd *cobra.Command, args []string) error {
 	chownToSudoUser(".lokl")
 
 	fmt.Printf("✓ Added %d entries to /etc/hosts\n", len(domains))
+	if n := p.WildcardParentCount(); n > 0 {
+		fmt.Printf("✓ Wrote %d resolver file(s) under /etc/resolver\n", n)
+	}
 	return nil
 }
 
@@ -102,6 +105,9 @@ func runDNSRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("✓ Removed DNS entries from /etc/hosts")
+	if n := p.WildcardParentCount(); n > 0 {
+		fmt.Println("✓ Removed resolver files under /etc/resolver")
+	}
 	fmt.Println("\nTo flush DNS cache:")
 	if runtime.GOOS == "darwin" {
 		fmt.Println("  sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder")

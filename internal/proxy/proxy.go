@@ -43,7 +43,7 @@ func New(cfg *config.Config) *Proxy {
 		cfg:             cfg,
 		router:          r,
 		certs:           newCertManager(defaultCertDir),
-		sysDNS:          newDNSManager(cfg.Name),
+		sysDNS:          newDNSManager(cfg.Name, parents, defaultDNSPort),
 		handler:         newHandler(r),
 		port:            defaultPort,
 		hasWildcard:     len(parents) > 0,
@@ -153,7 +153,7 @@ func (p *Proxy) Stop(cleanupDNS bool) error {
 	}
 
 	if cleanupDNS {
-		if err := p.sysDNS.remove(); err != nil {
+		if err := p.sysDNS.Remove(); err != nil {
 			errs = append(errs, fmt.Errorf("removing DNS entries: %w", err))
 		}
 	}
@@ -192,11 +192,15 @@ func (p *Proxy) DNSBlock() string {
 }
 
 func (p *Proxy) SetupDNS() error {
-	return p.sysDNS.add(p.router.enabledDomains())
+	return p.sysDNS.Setup(p.router.enabledDomains())
 }
 
 func (p *Proxy) RemoveDNS() error {
-	return p.sysDNS.remove()
+	return p.sysDNS.Remove()
+}
+
+func (p *Proxy) WildcardParentCount() int {
+	return len(p.wildcardParents)
 }
 
 func (p *Proxy) EnableServiceProxy(name string) bool {

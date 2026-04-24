@@ -1,9 +1,84 @@
 package proxy
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+)
+
+type fakeResolver struct {
+	written [][]string
+	removed [][]string
+	flushed int
+}
+
+func (f *fakeResolver) Write(p []string) error {
+	f.written = append(f.written, append([]string(nil), p...))
+	return nil
+}
+func (f *fakeResolver) Remove(p []string) error {
+	f.removed = append(f.removed, append([]string(nil), p...))
+	return nil
+}
+func (f *fakeResolver) FlushCache() error { f.flushed++; return nil }
+
+func TestDNSManagerSetupWritesResolverFiles(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fr := &fakeResolver{}
+	d := &dnsManager{
+		project:         "demo",
+		hostsPath:       hostsPath,
+		resolver:        fr,
+		wildcardParents: []string{"sellify.shop"},
+	}
+	if err := d.Setup([]string{"api.sellify.shop"}); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if len(fr.written) != 1 || !slices.Equal(fr.written[0], []string{"sellify.shop"}) {
+		t.Fatalf("resolver writes=%v", fr.written)
+	}
+	if fr.flushed != 1 {
+		t.Fatalf("flushed=%d want 1", fr.flushed)
+	}
+
+	if err := d.Remove(); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if len(fr.removed) != 1 || !slices.Equal(fr.removed[0], []string{"sellify.shop"}) {
+		t.Fatalf("resolver removes=%v", fr.removed)
+	}
+	if fr.flushed != 2 {
+		t.Fatalf("flushed=%d want 2", fr.flushed)
+	}
+}
+
+func TestDNSManagerSetupSkipsResolverWithoutWildcards(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fr := &fakeResolver{}
+	d := &dnsManager{
+		project:   "demo",
+		hostsPath: hostsPath,
+		resolver:  fr,
+	}
+	if err := d.Setup([]string{"a.test"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fr.written) != 0 || fr.flushed != 0 {
+		t.Fatalf("resolver should be untouched when no wildcards; writes=%v flushed=%d", fr.written, fr.flushed)
+	}
+}
 
 func TestHostsManagerRemoveBlock(t *testing.T) {
-	h := newDNSManager("myproject")
+	h := newDNSManager("myproject", nil, 0)
 
 	tests := []struct {
 		name    string
@@ -76,7 +151,7 @@ func TestHostsManagerRemoveBlock(t *testing.T) {
 }
 
 func TestHostsManagerBlock(t *testing.T) {
-	h := newDNSManager("myproject")
+	h := newDNSManager("myproject", nil, 0)
 
 	got := h.block([]string{"app.example.com", "api.example.com"})
 
@@ -91,7 +166,7 @@ func TestHostsManagerBlock(t *testing.T) {
 }
 
 func TestHostsManagerBlockEmpty(t *testing.T) {
-	h := newDNSManager("myproject")
+	h := newDNSManager("myproject", nil, 0)
 
 	got := h.block(nil)
 	want := "# lokl:myproject - START\n# lokl:myproject - END"
@@ -102,7 +177,7 @@ func TestHostsManagerBlockEmpty(t *testing.T) {
 }
 
 func TestHostsManagerMarkers(t *testing.T) {
-	h := newDNSManager("testproject")
+	h := newDNSManager("testproject", nil, 0)
 
 	if h.startMarker() != "# lokl:testproject - START" {
 		t.Errorf("startMarker() = %q", h.startMarker())
