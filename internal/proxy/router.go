@@ -11,6 +11,7 @@ import (
 type route struct {
 	name    string
 	domain  string
+	parent  string
 	port    int
 	rewrite *rewriteConfig
 	enabled atomic.Bool
@@ -25,6 +26,7 @@ type router struct {
 	baseDomain string
 	byHost     map[string][]*route
 	byName     map[string]*route
+	wildcards  []*route
 }
 
 func newRouter(cfg *config.Config) *router {
@@ -62,7 +64,12 @@ func newRouter(cfg *config.Config) *router {
 				}
 			}
 
-			r.byHost[fqdn] = append(r.byHost[fqdn], rt)
+			if after, isWild := strings.CutPrefix(fqdn, "*."); isWild {
+				rt.parent = after
+				r.wildcards = append(r.wildcards, rt)
+			} else {
+				r.byHost[fqdn] = append(r.byHost[fqdn], rt)
+			}
 			r.byName[name] = rt
 		}
 	}
@@ -72,6 +79,10 @@ func newRouter(cfg *config.Config) *router {
 			return prefixLen(routes[i]) > prefixLen(routes[j])
 		})
 	}
+
+	sort.Slice(r.wildcards, func(i, j int) bool {
+		return len(r.wildcards[i].parent) > len(r.wildcards[j].parent)
+	})
 
 	return r
 }

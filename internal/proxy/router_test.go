@@ -329,3 +329,51 @@ func TestRouterEnabledDomainsSharedSubdomain(t *testing.T) {
 		t.Error("domain should be disabled (both routes disabled)")
 	}
 }
+
+func TestRouterBuildsWildcards(t *testing.T) {
+	cfg := &config.Config{
+		Proxy: config.ProxyConfig{Domain: ""},
+		Services: map[string]config.Service{
+			"web": {
+				Port:       8000,
+				Subdomains: config.Subdomains{"sellify.shop", "*.sellify.shop"},
+			},
+		},
+	}
+	r := newRouter(cfg)
+
+	if _, ok := r.byHost["sellify.shop"]; !ok {
+		t.Fatal("apex route missing from byHost")
+	}
+	if len(r.wildcards) != 1 {
+		t.Fatalf("want 1 wildcard, got %d", len(r.wildcards))
+	}
+	if r.wildcards[0].parent != "sellify.shop" {
+		t.Fatalf("parent=%q", r.wildcards[0].parent)
+	}
+	if r.wildcards[0].name != "web" {
+		t.Fatalf("name=%q", r.wildcards[0].name)
+	}
+	if r.wildcards[0].port != 8000 {
+		t.Fatalf("port=%d", r.wildcards[0].port)
+	}
+	if !r.wildcards[0].enabled.Load() {
+		t.Fatal("wildcard route should default to enabled")
+	}
+}
+
+func TestRouterWildcardSortByParentLength(t *testing.T) {
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			"a": {Port: 8000, Subdomains: config.Subdomains{"*.sellify.shop"}},
+			"b": {Port: 8001, Subdomains: config.Subdomains{"*.api.sellify.shop"}},
+		},
+	}
+	r := newRouter(cfg)
+	if len(r.wildcards) != 2 {
+		t.Fatalf("want 2 wildcards, got %d", len(r.wildcards))
+	}
+	if r.wildcards[0].parent != "api.sellify.shop" {
+		t.Fatalf("wildcards[0].parent=%q, want longer parent first", r.wildcards[0].parent)
+	}
+}
