@@ -108,8 +108,8 @@ func (p *Proxy) Start() error {
 		return fmt.Errorf("binding port %d: %w", p.port, err)
 	}
 
-	primary, _ := p.certDomains()
-	cert, err := tls.LoadX509KeyPair(p.certs.certPath(primary), p.certs.keyPath(primary))
+	primary, sans := p.certDomains()
+	cert, err := tls.LoadX509KeyPair(p.certs.certPath(primary, sans), p.certs.keyPath(primary, sans))
 	if err != nil {
 		_ = ln.Close()
 		return fmt.Errorf("loading certificate: %w", err)

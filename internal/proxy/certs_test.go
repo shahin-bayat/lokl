@@ -7,6 +7,24 @@ import (
 	"github.com/shahin-bayat/lokl/internal/config"
 )
 
+func TestCertPathChangesWithSANs(t *testing.T) {
+	c := newCertManager("/tmp")
+	a := c.certPath("test", []string{"*.test", "test"})
+	b := c.certPath("test", []string{"*.test", "test", "api.foo"})
+	if a == b {
+		t.Fatalf("cert path should differ when SANs differ; got %s == %s", a, b)
+	}
+	if c.keyPath("test", []string{"*.test", "test"}) == c.keyPath("test", []string{"*.test", "test", "api.foo"}) {
+		t.Fatal("key path should differ when SANs differ")
+	}
+	// Stable: same SANs in different order should produce same path.
+	c1 := c.certPath("test", []string{"a", "b", "c"})
+	c2 := c.certPath("test", []string{"c", "a", "b"})
+	if c1 != c2 {
+		t.Fatalf("cert path should be stable across SAN ordering; %s != %s", c1, c2)
+	}
+}
+
 func TestCertDomains(t *testing.T) {
 	t.Run("base domain only", func(t *testing.T) {
 		cfg := &config.Config{

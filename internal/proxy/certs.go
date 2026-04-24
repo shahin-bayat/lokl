@@ -1,10 +1,14 @@
 package proxy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
 type certManager struct {
@@ -37,8 +41,8 @@ func (c *certManager) generate(primary string, sans []string) (certPath, keyPath
 		return "", "", fmt.Errorf("creating cert directory: %w", err)
 	}
 
-	certPath = c.certPath(primary)
-	keyPath = c.keyPath(primary)
+	certPath = c.certPath(primary, sans)
+	keyPath = c.keyPath(primary, sans)
 
 	if fileExists(certPath) && fileExists(keyPath) {
 		return certPath, keyPath, nil
@@ -55,12 +59,28 @@ func (c *certManager) generate(primary string, sans []string) (certPath, keyPath
 	return certPath, keyPath, nil
 }
 
-func (c *certManager) certPath(domain string) string {
-	return filepath.Join(c.dir, domain+".pem")
+func (c *certManager) certPath(domain string, sans []string) string {
+	return filepath.Join(c.dir, domain+"."+sanHash(sans)+".pem")
 }
 
-func (c *certManager) keyPath(domain string) string {
-	return filepath.Join(c.dir, domain+"-key.pem")
+func (c *certManager) keyPath(domain string, sans []string) string {
+	return filepath.Join(c.dir, domain+"."+sanHash(sans)+"-key.pem")
+}
+
+// sanHash produces a stable short hash of the SAN set so the cert filename
+// changes when the SAN list changes, invalidating the on-disk cache.
+func sanHash(sans []string) string {
+	uniq := make(map[string]struct{}, len(sans))
+	for _, s := range sans {
+		uniq[s] = struct{}{}
+	}
+	sorted := make([]string, 0, len(uniq))
+	for s := range uniq {
+		sorted = append(sorted, s)
+	}
+	sort.Strings(sorted)
+	sum := sha256.Sum256([]byte(strings.Join(sorted, "\x00")))
+	return hex.EncodeToString(sum[:])[:8]
 }
 
 func (c *certManager) checkMkcert() error {
