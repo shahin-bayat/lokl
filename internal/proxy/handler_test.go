@@ -113,7 +113,7 @@ func TestHandlerServeHTTPLocalRoute(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "t.example.com"},
 		Services: map[string]config.Service{
-			"web": {Subdomain: "app", Port: port},
+			"web": {Subdomains: config.Subdomains{"app"}, Port: port},
 		},
 	}
 
@@ -165,7 +165,7 @@ func TestHandlerXForwardedHeaders(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "t.example.com"},
 		Services: map[string]config.Service{
-			"web": {Subdomain: "app", Port: port},
+			"web": {Subdomains: config.Subdomains{"app"}, Port: port},
 		},
 	}
 
@@ -198,7 +198,7 @@ func TestHandlerResponseHeaders(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{Domain: "t.example.com"},
 		Services: map[string]config.Service{
-			"web": {Subdomain: "app", Port: port},
+			"web": {Subdomains: config.Subdomains{"app"}, Port: port},
 		},
 	}
 
@@ -250,6 +250,40 @@ func TestHasFileExtension(t *testing.T) {
 				t.Errorf("hasFileExtension(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRemoteHost(t *testing.T) {
+	exact := &route{domain: "app.sellify.shop"}
+	wild := &route{domain: "*.sellify.shop", parent: "sellify.shop"}
+
+	if got := remoteHost(exact, "app.sellify.shop"); got != "app.sellify.shop" {
+		t.Errorf("exact: got %q want app.sellify.shop", got)
+	}
+	if got := remoteHost(wild, "acme.sellify.shop"); got != "acme.sellify.shop" {
+		t.Errorf("wildcard: got %q want acme.sellify.shop (not pattern)", got)
+	}
+	if got := remoteHost(wild, "acme.sellify.shop:8443"); got != "acme.sellify.shop" {
+		t.Errorf("wildcard with port: got %q want acme.sellify.shop", got)
+	}
+}
+
+func TestInvalidateCacheSuffix(t *testing.T) {
+	h := newHandler(nil)
+	h.dnsCache["acme.sellify.shop"] = "1.2.3.4"
+	h.dnsCache["sellify.shop"] = "5.6.7.8"
+	h.dnsCache["other.test"] = "9.9.9.9"
+
+	h.invalidateCacheSuffix("sellify.shop")
+
+	if _, ok := h.dnsCache["acme.sellify.shop"]; ok {
+		t.Fatal("acme.sellify.shop should be evicted")
+	}
+	if _, ok := h.dnsCache["sellify.shop"]; ok {
+		t.Fatal("sellify.shop should be evicted")
+	}
+	if _, ok := h.dnsCache["other.test"]; !ok {
+		t.Fatal("other.test should remain")
 	}
 }
 

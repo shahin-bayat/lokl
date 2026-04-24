@@ -1,10 +1,14 @@
 package proxy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
 type certManager struct {
@@ -28,7 +32,7 @@ func (c *certManager) ensureCA() error {
 	return nil
 }
 
-func (c *certManager) generate(domain string) (certPath, keyPath string, err error) {
+func (c *certManager) generate(primary string, sans []string) (certPath, keyPath string, err error) {
 	if err := c.checkMkcert(); err != nil {
 		return "", "", err
 	}
@@ -37,19 +41,17 @@ func (c *certManager) generate(domain string) (certPath, keyPath string, err err
 		return "", "", fmt.Errorf("creating cert directory: %w", err)
 	}
 
-	certPath = c.certPath(domain)
-	keyPath = c.keyPath(domain)
+	certPath = c.certPath(primary, sans)
+	keyPath = c.keyPath(primary, sans)
 
 	if fileExists(certPath) && fileExists(keyPath) {
 		return certPath, keyPath, nil
 	}
 
-	wildcard := "*." + domain
-	out, err := exec.Command("mkcert",
-		"-cert-file", certPath,
-		"-key-file", keyPath,
-		wildcard, domain,
-	).CombinedOutput()
+	args := []string{"-cert-file", certPath, "-key-file", keyPath}
+	args = append(args, sans...)
+
+	out, err := exec.Command("mkcert", args...).CombinedOutput()
 	if err != nil {
 		return "", "", fmt.Errorf("generating certificate: %s: %w", out, err)
 	}
@@ -57,12 +59,28 @@ func (c *certManager) generate(domain string) (certPath, keyPath string, err err
 	return certPath, keyPath, nil
 }
 
-func (c *certManager) certPath(domain string) string {
-	return filepath.Join(c.dir, domain+".pem")
+func (c *certManager) certPath(domain string, sans []string) string {
+	return filepath.Join(c.dir, domain+"."+sanHash(sans)+".pem")
 }
 
-func (c *certManager) keyPath(domain string) string {
-	return filepath.Join(c.dir, domain+"-key.pem")
+func (c *certManager) keyPath(domain string, sans []string) string {
+	return filepath.Join(c.dir, domain+"."+sanHash(sans)+"-key.pem")
+}
+
+// sanHash produces a stable short hash of the SAN set so the cert filename
+// changes when the SAN list changes, invalidating the on-disk cache.
+func sanHash(sans []string) string {
+	uniq := make(map[string]struct{}, len(sans))
+	for _, s := range sans {
+		uniq[s] = struct{}{}
+	}
+	sorted := make([]string, 0, len(uniq))
+	for s := range uniq {
+		sorted = append(sorted, s)
+	}
+	sort.Strings(sorted)
+	sum := sha256.Sum256([]byte(strings.Join(sorted, "\x00")))
+	return hex.EncodeToString(sum[:])[:8]
 }
 
 func (c *certManager) checkMkcert() error {

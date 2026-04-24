@@ -17,7 +17,7 @@ func validate(cfg *Config) error {
 	}
 
 	for name, svc := range cfg.Services {
-		if svc.Subdomain != "" && cfg.Proxy.Domain == "" {
+		if len(svc.Subdomains) > 0 && cfg.Proxy.Domain == "" {
 			return fmt.Errorf("service %q has subdomain but proxy.domain is not configured", name)
 		}
 	}
@@ -26,14 +26,15 @@ func validate(cfg *Config) error {
 		return err
 	}
 
-	if err := checkDuplicateSubdomains(cfg); err != nil {
-		return err
-	}
-
 	for name, svc := range cfg.Services {
 		if err := validateService(name, &svc, cfg.Services); err != nil {
 			return err
 		}
+	}
+
+	// Run after per-service validation so duplicate detection sees only well-formed subdomains.
+	if err := checkDuplicateSubdomains(cfg); err != nil {
+		return err
 	}
 
 	return nil
@@ -86,8 +87,26 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		return fmt.Errorf("service %q: path is only valid for command-based services; container services cannot set path", name)
 	}
 
-	if svc.Subdomain != "" && svc.Port == 0 {
+	if len(svc.Subdomains) > 0 && svc.Port == 0 {
 		return fmt.Errorf("service %q: port is required when subdomain is set", name)
+	}
+
+	seen := map[string]struct{}{}
+	for _, sd := range svc.Subdomains {
+		if _, dup := seen[sd]; dup {
+			return fmt.Errorf("service %q: duplicate subdomain %q", name, sd)
+		}
+		seen[sd] = struct{}{}
+
+		if after, isWild := strings.CutPrefix(sd, "*."); isWild {
+			if err := validateWildcardParent(after); err != nil {
+				return fmt.Errorf("service %q: subdomain %q: %w", name, sd, err)
+			}
+			continue
+		}
+		if strings.Contains(sd, "*") {
+			return fmt.Errorf("service %q: invalid subdomain %q", name, sd)
+		}
 	}
 
 	if svc.Health != nil && svc.Health.Path != "" && svc.Port == 0 {
@@ -206,27 +225,53 @@ func checkDuplicateSubdomains(cfg *Config) error {
 	type key struct{ fqdn, prefix string }
 	seen := make(map[key]string)
 	for name, svc := range cfg.Services {
-		if svc.Subdomain == "" {
-			continue
-		}
-		fqdn := svc.Subdomain
-		if !strings.Contains(fqdn, ".") && cfg.Proxy.Domain != "" {
-			fqdn = svc.Subdomain + "." + cfg.Proxy.Domain
-		}
-		prefix := ""
-		if svc.Rewrite != nil {
-			prefix = strings.Trim(svc.Rewrite.StripPrefix, "/")
-		}
-		k := key{fqdn, prefix}
-		if existing, ok := seen[k]; ok {
-			if prefix == "" {
-				return fmt.Errorf("services %q and %q: same subdomain with no prefix",
-					existing, name)
+		for _, sd := range svc.Subdomains {
+			if sd == "" {
+				continue
 			}
-			return fmt.Errorf("services %q and %q: same subdomain with same prefix %q",
-				existing, name, prefix)
+			fqdn := sd
+			if !strings.Contains(fqdn, ".") && cfg.Proxy.Domain != "" {
+				fqdn = sd + "." + cfg.Proxy.Domain
+			}
+			prefix := ""
+			if svc.Rewrite != nil {
+				prefix = strings.Trim(svc.Rewrite.StripPrefix, "/")
+			}
+			k := key{fqdn, prefix}
+			if existing, ok := seen[k]; ok {
+				if prefix == "" {
+					return fmt.Errorf("services %q and %q: same subdomain with no prefix",
+						existing, name)
+				}
+				return fmt.Errorf("services %q and %q: same subdomain with same prefix %q",
+					existing, name, prefix)
+			}
+			seen[k] = name
 		}
-		seen[k] = name
+	}
+	return nil
+}
+
+var reservedWildcardParents = map[string]struct{}{
+	"com": {}, "org": {}, "net": {},
+	"local": {}, "localhost": {}, "test": {},
+}
+
+func validateWildcardParent(parent string) error {
+	if parent == "" {
+		return fmt.Errorf("wildcard must have a parent domain")
+	}
+	if _, reserved := reservedWildcardParents[parent]; reserved {
+		return fmt.Errorf("reserved wildcard parent %q", parent)
+	}
+	labels := strings.Split(parent, ".")
+	if len(labels) < 2 {
+		return fmt.Errorf("wildcard parent must have at least two labels")
+	}
+	for _, l := range labels {
+		if l == "" || strings.Contains(l, "*") {
+			return fmt.Errorf("invalid wildcard parent %q", parent)
+		}
 	}
 	return nil
 }

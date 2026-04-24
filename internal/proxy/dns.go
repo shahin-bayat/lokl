@@ -16,59 +16,118 @@ const (
 	dnsLookupTimeout = 2 * time.Second
 )
 
-type hostsManager struct {
-	project string
+type resolverWriter interface {
+	Write(parents []string) error
+	Remove(parents []string) error
+	FlushCache() error
+	// Missing returns the subset of parents that lack resolver installation.
+	Missing(parents []string) []string
 }
 
-func newHostsManager(project string) *hostsManager {
-	return &hostsManager{project: project}
+type dnsManager struct {
+	project         string
+	wildcardParents []string
+	resolver        resolverWriter
+	// hostsPath overrides the system hosts file in tests; empty means use hostsFile.
+	hostsPath string
 }
 
-func (h *hostsManager) add(domains []string) error {
+func newDNSManager(project string, wildcardParents []string, dnsPort int) *dnsManager {
+	return &dnsManager{
+		project:         project,
+		wildcardParents: wildcardParents,
+		resolver:        newResolverDir(dnsPort),
+	}
+}
+
+func (d *dnsManager) hostsPathOrDefault() string {
+	if d.hostsPath != "" {
+		return d.hostsPath
+	}
+	return hostsFile
+}
+
+func (d *dnsManager) Setup(exactDomains []string) error {
+	// Install resolver files first — the riskier step — so a failure doesn't leave
+	// /etc/hosts partially mutated.
+	if len(d.wildcardParents) > 0 {
+		if err := d.resolver.Write(d.wildcardParents); err != nil {
+			return fmt.Errorf("writing resolver files: %w", err)
+		}
+	}
+	if err := d.add(exactDomains); err != nil {
+		if len(d.wildcardParents) > 0 {
+			_ = d.resolver.Remove(d.wildcardParents)
+		}
+		return err
+	}
+	if len(d.wildcardParents) > 0 {
+		_ = d.resolver.FlushCache()
+	}
+	return nil
+}
+
+func (d *dnsManager) Remove() error {
+	if err := d.remove(); err != nil {
+		return err
+	}
+	if len(d.wildcardParents) == 0 {
+		return nil
+	}
+	if err := d.resolver.Remove(d.wildcardParents); err != nil {
+		return fmt.Errorf("removing resolver files: %w", err)
+	}
+	_ = d.resolver.FlushCache()
+	return nil
+}
+
+func (d *dnsManager) add(domains []string) error {
 	if len(domains) == 0 {
 		return nil
 	}
 
-	content, err := os.ReadFile(hostsFile)
+	path := d.hostsPathOrDefault()
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading hosts file: %w", err)
 	}
 
-	cleaned := h.removeBlock(string(content))
+	cleaned := d.removeBlock(string(content))
 
 	var block strings.Builder
-	block.WriteString(h.startMarker() + "\n")
+	block.WriteString(d.startMarker() + "\n")
 	for _, domain := range domains {
 		fmt.Fprintf(&block, "127.0.0.1 %s\n", domain)
 	}
-	block.WriteString(h.endMarker() + "\n")
+	block.WriteString(d.endMarker() + "\n")
 
 	newContent := strings.TrimRight(cleaned, "\n") + "\n\n" + block.String()
 
-	if err := os.WriteFile(hostsFile, []byte(newContent), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
 		return fmt.Errorf("writing hosts file: %w", err)
 	}
 
 	return nil
 }
 
-func (h *hostsManager) remove() error {
-	content, err := os.ReadFile(hostsFile)
+func (d *dnsManager) remove() error {
+	path := d.hostsPathOrDefault()
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading hosts file: %w", err)
 	}
 
-	cleaned := h.removeBlock(string(content))
+	cleaned := d.removeBlock(string(content))
 
-	if err := os.WriteFile(hostsFile, []byte(cleaned), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(cleaned), 0o644); err != nil {
 		return fmt.Errorf("writing hosts file: %w", err)
 	}
 
 	return nil
 }
 
-func (h *hostsManager) needsSudo() bool {
-	f, err := os.OpenFile(hostsFile, os.O_WRONLY, 0o644)
+func (d *dnsManager) needsSudo() bool {
+	f, err := os.OpenFile(d.hostsPathOrDefault(), os.O_WRONLY, 0o644)
 	if err != nil {
 		return true
 	}
@@ -76,17 +135,96 @@ func (h *hostsManager) needsSudo() bool {
 	return false
 }
 
-func (h *hostsManager) unresolved(domains []string) []string {
+func (d *dnsManager) MissingWildcardParents() []string {
+	if len(d.wildcardParents) == 0 {
+		return nil
+	}
+	return d.resolver.Missing(d.wildcardParents)
+}
+
+func (d *dnsManager) unresolved(domains []string) []string {
 	var missing []string
+
+	// Parse our hosts block once; used as the fallback oracle when LookupHost
+	// can't work (see coveredByInstalledWildcard).
+	blockHosts := d.currentBlockHosts()
+
 	for _, domain := range domains {
-		if !h.resolvesToLocalhost(domain) {
+		if d.coveredByInstalledWildcard(domain) {
+			if _, ok := blockHosts[domain]; ok {
+				continue
+			}
+			missing = append(missing, domain)
+			continue
+		}
+		if !d.resolvesToLocalhost(domain) {
 			missing = append(missing, domain)
 		}
 	}
 	return missing
 }
 
-func (h *hostsManager) resolvesToLocalhost(domain string) bool {
+// coveredByInstalledWildcard reports whether domain is under a wildcard parent
+// whose resolver file is installed. Such hosts cannot be probed via LookupHost
+// on macOS because the resolver file routes the whole zone to our DNS listener,
+// which is not running during pre-flight readiness checks.
+func (d *dnsManager) coveredByInstalledWildcard(domain string) bool {
+	if len(d.wildcardParents) == 0 || d.resolver == nil {
+		return false
+	}
+	missing := map[string]struct{}{}
+	for _, p := range d.resolver.Missing(d.wildcardParents) {
+		missing[p] = struct{}{}
+	}
+	for _, parent := range d.wildcardParents {
+		if _, isMissing := missing[parent]; isMissing {
+			continue
+		}
+		if domain == parent || strings.HasSuffix(domain, "."+parent) {
+			return true
+		}
+	}
+	return false
+}
+
+// currentBlockHosts returns the set of hostnames currently present in our
+// project's /etc/hosts block.
+func (d *dnsManager) currentBlockHosts() map[string]struct{} {
+	out := map[string]struct{}{}
+	content, err := os.ReadFile(d.hostsPathOrDefault())
+	if err != nil {
+		return out
+	}
+	startMarker := d.startMarker()
+	endMarker := d.endMarker()
+
+	scanner := bufio.NewScanner(strings.NewReader(string(content)))
+	inBlock := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == startMarker {
+			inBlock = true
+			continue
+		}
+		if line == endMarker {
+			inBlock = false
+			continue
+		}
+		if !inBlock {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		for _, host := range fields[1:] {
+			out[host] = struct{}{}
+		}
+	}
+	return out
+}
+
+func (d *dnsManager) resolvesToLocalhost(domain string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), dnsLookupTimeout)
 	defer cancel()
 
@@ -98,27 +236,27 @@ func (h *hostsManager) resolvesToLocalhost(domain string) bool {
 	return slices.Contains(addrs, "127.0.0.1") || slices.Contains(addrs, "::1")
 }
 
-func (h *hostsManager) block(domains []string) string {
+func (d *dnsManager) block(domains []string) string {
 	var b strings.Builder
-	b.WriteString(h.startMarker() + "\n")
+	b.WriteString(d.startMarker() + "\n")
 	for _, domain := range domains {
 		fmt.Fprintf(&b, "127.0.0.1 %s\n", domain)
 	}
-	b.WriteString(h.endMarker())
+	b.WriteString(d.endMarker())
 	return b.String()
 }
 
-func (h *hostsManager) startMarker() string {
-	return fmt.Sprintf("# lokl:%s - START", h.project)
+func (d *dnsManager) startMarker() string {
+	return fmt.Sprintf("# lokl:%s - START", d.project)
 }
 
-func (h *hostsManager) endMarker() string {
-	return fmt.Sprintf("# lokl:%s - END", h.project)
+func (d *dnsManager) endMarker() string {
+	return fmt.Sprintf("# lokl:%s - END", d.project)
 }
 
-func (h *hostsManager) removeBlock(content string) string {
-	startMarker := h.startMarker()
-	endMarker := h.endMarker()
+func (d *dnsManager) removeBlock(content string) string {
+	startMarker := d.startMarker()
+	endMarker := d.endMarker()
 
 	var result strings.Builder
 	scanner := bufio.NewScanner(strings.NewReader(content))

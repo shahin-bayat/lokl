@@ -1,9 +1,185 @@
 package proxy
 
-import "testing"
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+)
+
+type fakeResolver struct {
+	written [][]string
+	removed [][]string
+	flushed int
+	missing []string
+}
+
+func (f *fakeResolver) Write(p []string) error {
+	f.written = append(f.written, append([]string(nil), p...))
+	return nil
+}
+func (f *fakeResolver) Remove(p []string) error {
+	f.removed = append(f.removed, append([]string(nil), p...))
+	return nil
+}
+func (f *fakeResolver) FlushCache() error { f.flushed++; return nil }
+func (f *fakeResolver) Missing(parents []string) []string {
+	var out []string
+	for _, p := range parents {
+		for _, m := range f.missing {
+			if p == m {
+				out = append(out, p)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func TestDNSManagerSetupWritesResolverFiles(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fr := &fakeResolver{}
+	d := &dnsManager{
+		project:         "demo",
+		hostsPath:       hostsPath,
+		resolver:        fr,
+		wildcardParents: []string{"sellify.shop"},
+	}
+	if err := d.Setup([]string{"api.sellify.shop"}); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	if len(fr.written) != 1 || !slices.Equal(fr.written[0], []string{"sellify.shop"}) {
+		t.Fatalf("resolver writes=%v", fr.written)
+	}
+	if fr.flushed != 1 {
+		t.Fatalf("flushed=%d want 1", fr.flushed)
+	}
+
+	if err := d.Remove(); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if len(fr.removed) != 1 || !slices.Equal(fr.removed[0], []string{"sellify.shop"}) {
+		t.Fatalf("resolver removes=%v", fr.removed)
+	}
+	if fr.flushed != 2 {
+		t.Fatalf("flushed=%d want 2", fr.flushed)
+	}
+}
+
+func TestDNSManagerSetupSkipsResolverWithoutWildcards(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fr := &fakeResolver{}
+	d := &dnsManager{
+		project:   "demo",
+		hostsPath: hostsPath,
+		resolver:  fr,
+	}
+	if err := d.Setup([]string{"a.test"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fr.written) != 0 || fr.flushed != 0 {
+		t.Fatalf("resolver should be untouched when no wildcards; writes=%v flushed=%d", fr.written, fr.flushed)
+	}
+}
+
+func TestUnresolvedReportsMissingWildcardParents(t *testing.T) {
+	fr := &fakeResolver{missing: []string{"sellify.shop"}}
+	d := &dnsManager{
+		project:         "demo",
+		wildcardParents: []string{"sellify.shop"},
+		resolver:        fr,
+	}
+	got := d.MissingWildcardParents()
+	if len(got) != 1 || got[0] != "sellify.shop" {
+		t.Fatalf("got=%v want [sellify.shop]", got)
+	}
+}
+
+func TestMissingWildcardParentsEmptyWithoutWildcards(t *testing.T) {
+	fr := &fakeResolver{}
+	d := &dnsManager{project: "demo", resolver: fr}
+	if got := d.MissingWildcardParents(); len(got) != 0 {
+		t.Fatalf("got=%v want nil", got)
+	}
+}
+
+type failingResolver struct{ fakeResolver }
+
+func (f *failingResolver) Write(p []string) error { return errors.New("boom") }
+
+func TestSetupDoesNotWriteHostsWhenResolverFails(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte("original\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := &dnsManager{
+		project:         "demo",
+		hostsPath:       hostsPath,
+		resolver:        &failingResolver{},
+		wildcardParents: []string{"sellify.shop"},
+	}
+	if err := d.Setup([]string{"api.test"}); err == nil {
+		t.Fatal("Setup must error when resolver fails")
+	}
+	b, _ := os.ReadFile(hostsPath)
+	if string(b) != "original\n" {
+		t.Fatalf("hosts should be untouched when resolver fails; got %q", b)
+	}
+}
+
+func TestUnresolvedTrustsHostsBlockWhenWildcardResolverInstalled(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	seed := `# lokl:demo - START
+127.0.0.1 sellify.shop
+127.0.0.1 s3.sellify.shop
+# lokl:demo - END
+`
+	if err := os.WriteFile(hostsPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := &dnsManager{
+		project:         "demo",
+		hostsPath:       hostsPath,
+		wildcardParents: []string{"sellify.shop"},
+		resolver:        &fakeResolver{missing: nil},
+	}
+	got := d.unresolved([]string{"sellify.shop", "s3.sellify.shop"})
+	if len(got) != 0 {
+		t.Fatalf("unresolved should be empty when hosts block has entries and resolver installed; got %v", got)
+	}
+}
+
+func TestUnresolvedReportsHostsMissingUnderInstalledWildcard(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte("# lokl:demo - START\n# lokl:demo - END\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := &dnsManager{
+		project:         "demo",
+		hostsPath:       hostsPath,
+		wildcardParents: []string{"sellify.shop"},
+		resolver:        &fakeResolver{missing: nil},
+	}
+	got := d.unresolved([]string{"sellify.shop"})
+	if len(got) != 1 || got[0] != "sellify.shop" {
+		t.Fatalf("want [sellify.shop], got %v", got)
+	}
+}
 
 func TestHostsManagerRemoveBlock(t *testing.T) {
-	h := newHostsManager("myproject")
+	h := newDNSManager("myproject", nil, 0)
 
 	tests := []struct {
 		name    string
@@ -76,7 +252,7 @@ func TestHostsManagerRemoveBlock(t *testing.T) {
 }
 
 func TestHostsManagerBlock(t *testing.T) {
-	h := newHostsManager("myproject")
+	h := newDNSManager("myproject", nil, 0)
 
 	got := h.block([]string{"app.example.com", "api.example.com"})
 
@@ -91,7 +267,7 @@ func TestHostsManagerBlock(t *testing.T) {
 }
 
 func TestHostsManagerBlockEmpty(t *testing.T) {
-	h := newHostsManager("myproject")
+	h := newDNSManager("myproject", nil, 0)
 
 	got := h.block(nil)
 	want := "# lokl:myproject - START\n# lokl:myproject - END"
@@ -102,7 +278,7 @@ func TestHostsManagerBlockEmpty(t *testing.T) {
 }
 
 func TestHostsManagerMarkers(t *testing.T) {
-	h := newHostsManager("testproject")
+	h := newDNSManager("testproject", nil, 0)
 
 	if h.startMarker() != "# lokl:testproject - START" {
 		t.Errorf("startMarker() = %q", h.startMarker())

@@ -200,7 +200,7 @@ func (s *Supervisor) Services() []types.ServiceInfo {
 			Port: svc.Port,
 		}
 
-		if domain := s.serviceDomain(svc); domain != "" {
+		if domain := s.primaryDomain(svc); domain != "" {
 			item.Domain = domain
 			item.ProxyEnabled = s.proxyManager.IsServiceProxyEnabled(name)
 			if svc.Rewrite != nil {
@@ -247,17 +247,21 @@ func (s *Supervisor) cleanupStarted(names []string) {
 	}
 }
 
-func (s *Supervisor) serviceDomain(svc config.Service) string {
-	if svc.Subdomain == "" {
+func (s *Supervisor) primaryDomain(svc config.Service) string {
+	if len(svc.Subdomains) == 0 {
 		return ""
 	}
-	if strings.Contains(svc.Subdomain, ".") {
-		return svc.Subdomain
+	sd := svc.Subdomains[0]
+	if sd == "" {
+		return ""
+	}
+	if strings.Contains(sd, ".") {
+		return sd
 	}
 	if s.cfg.Proxy.Domain == "" {
 		return ""
 	}
-	return svc.Subdomain + "." + s.cfg.Proxy.Domain
+	return sd + "." + s.cfg.Proxy.Domain
 }
 
 func (s *Supervisor) setupProxy() error {

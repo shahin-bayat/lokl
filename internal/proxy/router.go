@@ -11,6 +11,7 @@ import (
 type route struct {
 	name    string
 	domain  string
+	parent  string
 	port    int
 	rewrite *rewriteConfig
 	enabled atomic.Bool
@@ -24,42 +25,53 @@ type rewriteConfig struct {
 type router struct {
 	baseDomain string
 	byHost     map[string][]*route
-	byName     map[string]*route
+	byName     map[string][]*route
+	wildcards  []*route
 }
 
 func newRouter(cfg *config.Config) *router {
 	r := &router{
 		baseDomain: cfg.Proxy.Domain,
 		byHost:     make(map[string][]*route),
-		byName:     make(map[string]*route),
+		byName:     make(map[string][]*route),
 	}
 
 	for name, svc := range cfg.Services {
-		if svc.Subdomain == "" || svc.Port == 0 {
+		if svc.Port == 0 {
 			continue
 		}
-
-		fqdn := svc.Subdomain
-		if !strings.Contains(svc.Subdomain, ".") && cfg.Proxy.Domain != "" {
-			fqdn = svc.Subdomain + "." + cfg.Proxy.Domain
-		}
-
-		rt := &route{
-			name:   name,
-			domain: fqdn,
-			port:   svc.Port,
-		}
-		rt.enabled.Store(true)
-
-		if svc.Rewrite != nil {
-			rt.rewrite = &rewriteConfig{
-				stripPrefix: strings.Trim(svc.Rewrite.StripPrefix, "/"),
-				fallback:    svc.Rewrite.Fallback,
+		for _, sd := range svc.Subdomains {
+			if sd == "" {
+				continue
 			}
-		}
 
-		r.byHost[fqdn] = append(r.byHost[fqdn], rt)
-		r.byName[name] = rt
+			fqdn := sd
+			if !strings.Contains(sd, ".") && cfg.Proxy.Domain != "" {
+				fqdn = sd + "." + cfg.Proxy.Domain
+			}
+
+			rt := &route{
+				name:   name,
+				domain: fqdn,
+				port:   svc.Port,
+			}
+			rt.enabled.Store(true)
+
+			if svc.Rewrite != nil {
+				rt.rewrite = &rewriteConfig{
+					stripPrefix: strings.Trim(svc.Rewrite.StripPrefix, "/"),
+					fallback:    svc.Rewrite.Fallback,
+				}
+			}
+
+			if after, isWild := strings.CutPrefix(fqdn, "*."); isWild {
+				rt.parent = after
+				r.wildcards = append(r.wildcards, rt)
+			} else {
+				r.byHost[fqdn] = append(r.byHost[fqdn], rt)
+			}
+			r.byName[name] = append(r.byName[name], rt)
+		}
 	}
 
 	for _, routes := range r.byHost {
@@ -67,6 +79,11 @@ func newRouter(cfg *config.Config) *router {
 			return prefixLen(routes[i]) > prefixLen(routes[j])
 		})
 	}
+
+	// Longest parent first so nested wildcards (e.g. *.api.x.test) win over *.x.test during match.
+	sort.SliceStable(r.wildcards, func(i, j int) bool {
+		return len(r.wildcards[i].parent) > len(r.wildcards[j].parent)
+	})
 
 	return r
 }
@@ -76,14 +93,46 @@ func (r *router) match(host, path string) *route {
 		host = host[:idx]
 	}
 
-	routes := r.byHost[host]
-	if len(routes) == 0 {
-		return nil
+	if routes := r.byHost[host]; len(routes) > 0 {
+		return selectByPath(routes, path)
 	}
+
+	for _, rt := range r.wildcards {
+		if wildcardMatches(host, rt.parent) {
+			return selectByPath(wildcardsWithParent(r.wildcards, rt.parent), path)
+		}
+	}
+	return nil
+}
+
+// wildcardMatches enforces a dot boundary so evil-sellify.shop does not match *.sellify.shop.
+func wildcardMatches(host, parent string) bool {
+	prefix, ok := strings.CutSuffix(host, "."+parent)
+	if !ok || prefix == "" {
+		return false
+	}
+	for _, label := range strings.Split(prefix, ".") {
+		if label == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func wildcardsWithParent(all []*route, parent string) []*route {
+	out := make([]*route, 0, 1)
+	for _, rt := range all {
+		if rt.parent == parent {
+			out = append(out, rt)
+		}
+	}
+	return out
+}
+
+func selectByPath(routes []*route, path string) *route {
 	if len(routes) == 1 {
 		return routes[0]
 	}
-
 	for _, rt := range routes {
 		if rt.rewrite != nil && rt.rewrite.stripPrefix != "" {
 			prefix := "/" + rt.rewrite.stripPrefix
@@ -92,13 +141,11 @@ func (r *router) match(host, path string) *route {
 			}
 		}
 	}
-
 	for _, rt := range routes {
 		if rt.rewrite == nil || rt.rewrite.stripPrefix == "" {
 			return rt
 		}
 	}
-
 	return nil
 }
 
@@ -107,6 +154,7 @@ func (r *router) domains() []string {
 	for domain := range r.byHost {
 		domains = append(domains, domain)
 	}
+	sort.Strings(domains)
 	return domains
 }
 
@@ -120,6 +168,7 @@ func (r *router) enabledDomains() []string {
 			}
 		}
 	}
+	sort.Strings(domains)
 	return domains
 }
 
@@ -128,12 +177,18 @@ func (r *router) domain() string {
 }
 
 func (r *router) setEnabled(name string, enabled bool) bool {
-	rt, ok := r.byName[name]
-	if !ok {
+	routes, ok := r.byName[name]
+	if !ok || len(routes) == 0 {
 		return false
 	}
-	rt.enabled.Store(enabled)
+	for _, rt := range routes {
+		rt.enabled.Store(enabled)
+	}
 	return true
+}
+
+func (r *router) routesFor(name string) []*route {
+	return r.byName[name]
 }
 
 func prefixLen(rt *route) int {

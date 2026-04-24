@@ -1,0 +1,145 @@
+package proxy
+
+import (
+	"fmt"
+	"net"
+	"strings"
+	"sync"
+
+	"github.com/miekg/dns"
+)
+
+const (
+	defaultDNSPort = 5454
+	dnsTTL         = 5
+)
+
+type dnsServer struct {
+	addr    string
+	parents []string
+	conn    *net.UDPConn
+	srv     *dns.Server
+	mu      sync.Mutex
+	errCh   chan error
+	done    chan struct{}
+}
+
+func newDNSServer(addr string, parents []string) (*dnsServer, error) {
+	if len(parents) == 0 {
+		return nil, fmt.Errorf("dns server requires at least one wildcard parent")
+	}
+	return &dnsServer{
+		addr:    addr,
+		parents: parents,
+		errCh:   make(chan error, 1),
+		done:    make(chan struct{}),
+	}, nil
+}
+
+func (s *dnsServer) Start() error { return s.startNotify(nil) }
+
+func (s *dnsServer) startNotify(started chan<- struct{}) error {
+	udpAddr, err := net.ResolveUDPAddr("udp", s.addr)
+	if err != nil {
+		return fmt.Errorf("resolving dns addr: %w", err)
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return fmt.Errorf("listening on %s: %w", s.addr, err)
+	}
+	s.mu.Lock()
+	s.conn = conn
+	s.srv = &dns.Server{PacketConn: conn, Handler: dns.HandlerFunc(s.handle)}
+	if started != nil {
+		s.srv.NotifyStartedFunc = func() { close(started) }
+	}
+	s.mu.Unlock()
+
+	go func() {
+		err := s.srv.ActivateAndServe()
+		if err == nil {
+			return
+		}
+		// Drop the error if shutdown has started; avoids send-on-closed-channel panics.
+		select {
+		case <-s.done:
+		case s.errCh <- err:
+		default:
+		}
+	}()
+	return nil
+}
+
+func (s *dnsServer) Err() <-chan error { return s.errCh }
+
+func (s *dnsServer) Shutdown() error {
+	s.mu.Lock()
+	srv := s.srv
+	s.mu.Unlock()
+	if srv == nil {
+		return nil
+	}
+	select {
+	case <-s.done:
+		return nil // already shut down
+	default:
+		close(s.done)
+	}
+	return srv.Shutdown()
+}
+
+func (s *dnsServer) LocalAddr() net.Addr {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.conn == nil {
+		return nil
+	}
+	return s.conn.LocalAddr()
+}
+
+func (s *dnsServer) handle(w dns.ResponseWriter, req *dns.Msg) {
+	resp := new(dns.Msg)
+	resp.SetReply(req)
+	resp.Authoritative = true
+
+	if len(req.Question) != 1 {
+		resp.Rcode = dns.RcodeRefused
+		_ = w.WriteMsg(resp)
+		return
+	}
+
+	q := req.Question[0]
+	name := strings.TrimSuffix(strings.ToLower(q.Name), ".")
+	if !s.inScope(name) {
+		resp.Rcode = dns.RcodeRefused
+		_ = w.WriteMsg(resp)
+		return
+	}
+
+	hdr := dns.RR_Header{Name: q.Name, Class: dns.ClassINET, Ttl: dnsTTL}
+	switch q.Qtype {
+	case dns.TypeA:
+		hdr.Rrtype = dns.TypeA
+		resp.Answer = append(resp.Answer, &dns.A{Hdr: hdr, A: net.IPv4(127, 0, 0, 1)})
+	case dns.TypeAAAA:
+		hdr.Rrtype = dns.TypeAAAA
+		resp.Answer = append(resp.Answer, &dns.AAAA{Hdr: hdr, AAAA: net.ParseIP("::1")})
+	}
+	_ = w.WriteMsg(resp)
+}
+
+// inScope reports whether name is a subdomain of a known wildcard parent.
+// The bare parent (apex) is intentionally refused: apex hosts are served via
+// /etc/hosts when explicitly declared, and answering the apex here would steal
+// traffic meant for the real domain when only wildcards are declared.
+func (s *dnsServer) inScope(name string) bool {
+	for _, parent := range s.parents {
+		if name == parent {
+			continue
+		}
+		if strings.HasSuffix(name, "."+parent) {
+			return true
+		}
+	}
+	return false
+}
