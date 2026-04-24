@@ -99,6 +99,19 @@ func (r *Runner) Logs() []string {
 }
 
 func (r *Runner) probeLoop(ctx context.Context) {
+	onChange := func(healthy bool) {
+		was := r.healthy.Load()
+		r.healthy.Store(healthy)
+		if was != healthy {
+			r.onChange()
+		}
+	}
+
+	if r.svc.Health != nil && r.svc.Health.Path != "" {
+		runner.RunHealthCheck(ctx, r.svc.Port, r.svc.Health.Path, probeInterval, probeTimeout, probeRetries, onChange)
+		return
+	}
+
 	probe := func() bool {
 		d := net.Dialer{Timeout: probeTimeout}
 		conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", r.svc.Port))
@@ -108,11 +121,5 @@ func (r *Runner) probeLoop(ctx context.Context) {
 		_ = conn.Close()
 		return true
 	}
-	runner.RunProbe(ctx, probe, probeInterval, probeRetries, func(healthy bool) {
-		was := r.healthy.Load()
-		r.healthy.Store(healthy)
-		if was != healthy {
-			r.onChange()
-		}
-	})
+	runner.RunProbe(ctx, probe, probeInterval, probeRetries, onChange)
 }

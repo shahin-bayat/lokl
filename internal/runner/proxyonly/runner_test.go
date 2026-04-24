@@ -2,6 +2,11 @@ package proxyonly
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -90,6 +95,85 @@ func TestRunnerLogsBanner(t *testing.T) {
 	logs := r.Logs()
 	if len(logs) == 0 {
 		t.Fatal("Logs should return a banner")
+	}
+}
+
+func TestRunnerHealthyViaHTTPPath(t *testing.T) {
+	ready := make(chan struct{})
+	var mu sync.Mutex
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(200)
+			select {
+			case ready <- struct{}{}:
+			default:
+			}
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	t.Cleanup(srv.Close)
+
+	port, err := strconv.Atoi(strings.TrimPrefix(srv.URL, "http://127.0.0.1:"))
+	if err != nil {
+		t.Fatalf("parse port: %v", err)
+	}
+
+	svc := config.Service{
+		ProxyOnly:  true,
+		Port:       port,
+		Subdomains: config.Subdomains{"x"},
+		Health:     &config.HealthConfig{Path: "/healthz"},
+	}
+	r := New("x", svc, func() {}, func() {})
+	if err := r.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Stop() })
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if r.IsHealthy() {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	mu.Lock()
+	calls := callCount
+	mu.Unlock()
+	t.Fatalf("IsHealthy did not flip to true within 5s (probe calls=%d)", calls)
+}
+
+func TestRunnerUnhealthyViaHTTPPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(503)
+	}))
+	t.Cleanup(srv.Close)
+
+	port, err := strconv.Atoi(strings.TrimPrefix(srv.URL, "http://127.0.0.1:"))
+	if err != nil {
+		t.Fatalf("parse port: %v", err)
+	}
+
+	svc := config.Service{
+		ProxyOnly:  true,
+		Port:       port,
+		Subdomains: config.Subdomains{"x"},
+		Health:     &config.HealthConfig{Path: "/healthz"},
+	}
+	r := New("x", svc, func() {}, func() {})
+	if err := r.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Stop() })
+
+	time.Sleep(2500 * time.Millisecond)
+	if r.IsHealthy() {
+		t.Fatal("IsHealthy must stay false when HTTP probe gets 503")
 	}
 }
 

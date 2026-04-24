@@ -255,7 +255,7 @@ services:
 
 ### Disallowed fields
 
-`command`, `image`, `ports`, `volumes`, `env`, `env_file`, `autostart`, `restart`, `ready_timeout`, `limits`, `health.command`. Validation rejects these with a clear error naming the field.
+`command`, `image`, `ports`, `volumes`, `env`, `env_file`, `autostart`, `restart`, `ready_timeout`, `limits`, `health.command`. Validation rejects these with a clear error message.
 
 ### Notes
 
