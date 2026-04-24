@@ -65,11 +65,9 @@ func startTestDNSServer(t *testing.T, parents []string) (*dnsServer, string) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	for i := 0; i < 50 && srv.LocalAddr() == nil; i++ {
-		time.Sleep(10 * time.Millisecond)
+	addr := srv.LocalAddr()
+	if addr == nil {
+		t.Fatal("listener did not bind")
 	}
-	if srv.LocalAddr() == nil {
-		t.Fatal("server did not bind in time")
-	}
-	return srv, srv.LocalAddr().String()
+	return srv, addr.String()
 }

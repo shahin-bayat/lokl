@@ -15,18 +15,20 @@ const (
 )
 
 type dnsServer struct {
-	addr    string
-	parents []string
-	conn    *net.UDPConn
-	srv     *dns.Server
-	mu      sync.Mutex
+	addr     string
+	parents  []string
+	conn     *net.UDPConn
+	srv      *dns.Server
+	mu       sync.Mutex
+	errCh    chan error
+	closeErr sync.Once
 }
 
 func newDNSServer(addr string, parents []string) (*dnsServer, error) {
 	if len(parents) == 0 {
 		return nil, fmt.Errorf("dns server requires at least one wildcard parent")
 	}
-	return &dnsServer{addr: addr, parents: parents}, nil
+	return &dnsServer{addr: addr, parents: parents, errCh: make(chan error, 1)}, nil
 }
 
 func (s *dnsServer) Start() error {
@@ -43,9 +45,18 @@ func (s *dnsServer) Start() error {
 	s.srv = &dns.Server{PacketConn: conn, Handler: dns.HandlerFunc(s.handle)}
 	s.mu.Unlock()
 
-	go func() { _ = s.srv.ActivateAndServe() }()
+	go func() {
+		if err := s.srv.ActivateAndServe(); err != nil {
+			select {
+			case s.errCh <- err:
+			default:
+			}
+		}
+	}()
 	return nil
 }
+
+func (s *dnsServer) Err() <-chan error { return s.errCh }
 
 func (s *dnsServer) Shutdown() error {
 	s.mu.Lock()
@@ -54,7 +65,9 @@ func (s *dnsServer) Shutdown() error {
 	if srv == nil {
 		return nil
 	}
-	return srv.Shutdown()
+	err := srv.Shutdown()
+	s.closeErr.Do(func() { close(s.errCh) })
+	return err
 }
 
 func (s *dnsServer) LocalAddr() net.Addr {
