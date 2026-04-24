@@ -1,0 +1,116 @@
+// Package proxyonly implements a supervisor.ProcessRunner for services that
+// declare `proxy_only: true`. These services do not start a process or
+// container; they only register a forwarding route and run a TCP health
+// probe against 127.0.0.1:<port> so the TUI can reflect whether the target
+// is reachable.
+package proxyonly
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/shahin-bayat/lokl/internal/config"
+	"github.com/shahin-bayat/lokl/internal/runner"
+)
+
+const (
+	probeInterval = 2 * time.Second
+	probeTimeout  = 1 * time.Second
+	probeRetries  = 3
+)
+
+type Runner struct {
+	name     string
+	svc      config.Service
+	onChange func()
+	onCrash  func()
+
+	mu      sync.Mutex
+	running bool
+	cancel  context.CancelFunc
+	healthy atomic.Bool
+}
+
+func New(name string, svc config.Service, onChange, onCrash func()) *Runner {
+	return &Runner{
+		name:     name,
+		svc:      svc,
+		onChange: onChange,
+		onCrash:  onCrash,
+	}
+}
+
+func (r *Runner) Start() error {
+	r.mu.Lock()
+	if r.running {
+		r.mu.Unlock()
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.running = true
+	r.cancel = cancel
+	r.mu.Unlock()
+
+	go r.probeLoop(ctx)
+	r.onChange()
+	return nil
+}
+
+func (r *Runner) Stop() error {
+	r.mu.Lock()
+	if !r.running {
+		r.mu.Unlock()
+		return nil
+	}
+	r.running = false
+	cancel := r.cancel
+	r.cancel = nil
+	r.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	r.healthy.Store(false)
+	r.onChange()
+	return nil
+}
+
+func (r *Runner) IsRunning() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.running
+}
+
+func (r *Runner) IsHealthy() bool {
+	return r.healthy.Load()
+}
+
+func (r *Runner) Logs() []string {
+	return []string{
+		fmt.Sprintf("proxy-only service · forwarding to 127.0.0.1:%d", r.svc.Port),
+		"no process output",
+	}
+}
+
+func (r *Runner) probeLoop(ctx context.Context) {
+	probe := func() bool {
+		d := net.Dialer{Timeout: probeTimeout}
+		conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", r.svc.Port))
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
+	}
+	runner.RunProbe(ctx, probe, probeInterval, probeRetries, func(healthy bool) {
+		was := r.healthy.Load()
+		r.healthy.Store(healthy)
+		if was != healthy {
+			r.onChange()
+		}
+	})
+}
