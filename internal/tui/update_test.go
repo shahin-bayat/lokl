@@ -12,10 +12,18 @@ import (
 type restartFakeController struct {
 	svcs         []types.ServiceInfo
 	restartCalls int
+	startCalls   int
+	stopCalls    int
 }
 
-func (f *restartFakeController) StartService(_ string) error { return nil }
-func (f *restartFakeController) StopService(_ string) error  { return nil }
+func (f *restartFakeController) StartService(_ string) error {
+	f.startCalls++
+	return nil
+}
+func (f *restartFakeController) StopService(_ string) error {
+	f.stopCalls++
+	return nil
+}
 func (f *restartFakeController) RestartService(_ string) error {
 	f.restartCalls++
 	return nil
@@ -62,5 +70,47 @@ func TestRestartKeyCallsRestartOnNormalService(t *testing.T) {
 
 	if ctrl.restartCalls != 1 {
 		t.Fatalf("RestartService should be called once; got %d", ctrl.restartCalls)
+	}
+}
+
+func TestStartKeyNoopsOnProxyOnly(t *testing.T) {
+	ctrl := &restartFakeController{
+		svcs: []types.ServiceInfo{
+			{Name: "console", Port: 9001, ProxyOnly: true, Running: false},
+		},
+	}
+	m := newModel(ctrl)
+	m.selectedIdx = 0
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+	updated, _ := m.Update(msg)
+	m = updated.(Model)
+
+	if ctrl.startCalls != 0 {
+		t.Fatalf("StartService should not be called on proxy-only; calls=%d", ctrl.startCalls)
+	}
+	if !strings.Contains(m.copyMsg, "proxy-only") {
+		t.Fatalf("expected proxy-only toast; got %q", m.copyMsg)
+	}
+}
+
+func TestStopKeyNoopsOnProxyOnly(t *testing.T) {
+	ctrl := &restartFakeController{
+		svcs: []types.ServiceInfo{
+			{Name: "console", Port: 9001, ProxyOnly: true, Running: true},
+		},
+	}
+	m := newModel(ctrl)
+	m.selectedIdx = 0
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
+	updated, _ := m.Update(msg)
+	m = updated.(Model)
+
+	if ctrl.stopCalls != 0 {
+		t.Fatalf("StopService should not be called on proxy-only; calls=%d", ctrl.stopCalls)
+	}
+	if !strings.Contains(m.copyMsg, "proxy-only") {
+		t.Fatalf("expected proxy-only toast; got %q", m.copyMsg)
 	}
 }

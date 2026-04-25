@@ -153,11 +153,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "s":
 		if svc := m.selectedService(); svc != nil {
+			if svc.ProxyOnly {
+				m.copyMsg = "proxy-only services have no process to start"
+				m.copyExpiry = time.Now().Add(copyFlashDuration)
+				return m, copyFlashTimeout()
+			}
 			_ = m.controller.StartService(svc.Name)
 		}
 
 	case "x":
 		if svc := m.selectedService(); svc != nil {
+			if svc.ProxyOnly {
+				m.copyMsg = "proxy-only services have no process to stop"
+				m.copyExpiry = time.Now().Add(copyFlashDuration)
+				return m, copyFlashTimeout()
+			}
 			_ = m.controller.StopService(svc.Name)
 		}
 
