@@ -21,6 +21,9 @@ func applyDefaults(cfg *Config) {
 
 	for name, svc := range cfg.Services {
 		if svc.ProxyOnly {
+			if svc.Health != nil {
+				applyHealthDefaults(svc.Health)
+			}
 			cfg.Services[name] = svc
 			continue
 		}

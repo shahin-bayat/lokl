@@ -177,6 +177,42 @@ func TestRunnerUnhealthyViaHTTPPath(t *testing.T) {
 	}
 }
 
+func TestRunnerHonorsHealthInterval(t *testing.T) {
+	five := 5
+	svc := config.Service{
+		ProxyOnly:  true,
+		Port:       9999,
+		Subdomains: config.Subdomains{"x"},
+		Health:     &config.HealthConfig{Interval: "100ms", Timeout: "50ms", Retries: &five},
+	}
+	r := New("x", svc, func() {}, func() {})
+	interval, timeout, retries := r.probeTimings()
+	if interval != 100*time.Millisecond {
+		t.Errorf("interval=%v, want 100ms", interval)
+	}
+	if timeout != 50*time.Millisecond {
+		t.Errorf("timeout=%v, want 50ms", timeout)
+	}
+	if retries != 5 {
+		t.Errorf("retries=%d, want 5", retries)
+	}
+}
+
+func TestRunnerFallsBackToDefaultsWhenHealthOmitted(t *testing.T) {
+	svc := config.Service{ProxyOnly: true, Port: 9999, Subdomains: config.Subdomains{"x"}}
+	r := New("x", svc, func() {}, func() {})
+	interval, timeout, retries := r.probeTimings()
+	if interval != defaultProbeInterval {
+		t.Errorf("interval=%v, want %v", interval, defaultProbeInterval)
+	}
+	if timeout != defaultProbeTimeout {
+		t.Errorf("timeout=%v, want %v", timeout, defaultProbeTimeout)
+	}
+	if retries != defaultProbeRetries {
+		t.Errorf("retries=%d, want %d", retries, defaultProbeRetries)
+	}
+}
+
 func TestRunnerStopIsIdempotent(t *testing.T) {
 	svc := config.Service{ProxyOnly: true, Port: 9999, Subdomains: config.Subdomains{"x"}}
 	r := New("x", svc, func() {}, func() {})

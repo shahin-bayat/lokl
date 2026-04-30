@@ -241,6 +241,29 @@ func TestValidateProxyOnlyRejectsEveryForbiddenField(t *testing.T) {
 	})
 }
 
+func TestProxyOnlyAppliesHealthDefaults(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Services: map[string]Service{
+			"shim": {
+				ProxyOnly:  true,
+				Port:       9001,
+				Subdomains: Subdomains{"shim"},
+				Health:     &HealthConfig{Path: "/healthz"},
+			},
+		},
+	}
+	applyDefaults(cfg)
+	h := cfg.Services["shim"].Health
+	if h == nil {
+		t.Fatal("Health should remain non-nil")
+	}
+	if h.Interval == "" || h.Timeout == "" || h.Retries == nil {
+		t.Fatalf("health defaults missing: %+v", h)
+	}
+}
+
 func TestProxyOnlyDoesNotInheritDefaults(t *testing.T) {
 	cfg := &Config{
 		Name:  "demo",

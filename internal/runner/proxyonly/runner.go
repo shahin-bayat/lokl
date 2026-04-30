@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	probeInterval = 2 * time.Second
-	probeTimeout  = 1 * time.Second
-	probeRetries  = 3
+	defaultProbeInterval = 2 * time.Second
+	defaultProbeTimeout  = 1 * time.Second
+	defaultProbeRetries  = 3
 )
 
 type Runner struct {
@@ -98,7 +98,33 @@ func (r *Runner) Logs() []string {
 	}
 }
 
+func (r *Runner) probeTimings() (interval, timeout time.Duration, retries int) {
+	interval = defaultProbeInterval
+	timeout = defaultProbeTimeout
+	retries = defaultProbeRetries
+
+	if r.svc.Health == nil {
+		return
+	}
+	if r.svc.Health.Interval != "" {
+		if d, err := time.ParseDuration(r.svc.Health.Interval); err == nil {
+			interval = d
+		}
+	}
+	if r.svc.Health.Timeout != "" {
+		if d, err := time.ParseDuration(r.svc.Health.Timeout); err == nil {
+			timeout = d
+		}
+	}
+	if r.svc.Health.Retries != nil {
+		retries = *r.svc.Health.Retries
+	}
+	return
+}
+
 func (r *Runner) probeLoop(ctx context.Context) {
+	interval, timeout, retries := r.probeTimings()
+
 	onChange := func(healthy bool) {
 		was := r.healthy.Load()
 		r.healthy.Store(healthy)
@@ -108,12 +134,12 @@ func (r *Runner) probeLoop(ctx context.Context) {
 	}
 
 	if r.svc.Health != nil && r.svc.Health.Path != "" {
-		runner.RunHealthCheck(ctx, r.svc.Port, r.svc.Health.Path, probeInterval, probeTimeout, probeRetries, onChange)
+		runner.RunHealthCheck(ctx, r.svc.Port, r.svc.Health.Path, interval, timeout, retries, onChange)
 		return
 	}
 
 	probe := func() bool {
-		d := net.Dialer{Timeout: probeTimeout}
+		d := net.Dialer{Timeout: timeout}
 		conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", r.svc.Port))
 		if err != nil {
 			return false
@@ -121,5 +147,5 @@ func (r *Runner) probeLoop(ctx context.Context) {
 		_ = conn.Close()
 		return true
 	}
-	runner.RunProbe(ctx, probe, probeInterval, probeRetries, onChange)
+	runner.RunProbe(ctx, probe, interval, retries, onChange)
 }
