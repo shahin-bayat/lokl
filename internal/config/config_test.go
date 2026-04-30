@@ -545,3 +545,32 @@ func TestSubdomainsUnmarshal(t *testing.T) {
 		}
 	})
 }
+
+func TestProxyOnlyField(t *testing.T) {
+	yml := `
+name: demo
+proxy: { domain: test }
+services:
+  console:
+    proxy_only: true
+    subdomain: console
+    port: 9001
+`
+	var cfg Config
+	if err := yaml.Unmarshal([]byte(yml), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	svc, ok := cfg.Services["console"]
+	if !ok {
+		t.Fatal("console service missing")
+	}
+	if !svc.ProxyOnly {
+		t.Fatal("ProxyOnly should be true")
+	}
+	if svc.Port != 9001 {
+		t.Fatalf("port=%d want 9001", svc.Port)
+	}
+	if !slices.Equal(svc.Subdomains, []string{"console"}) {
+		t.Fatalf("subdomains=%v", svc.Subdomains)
+	}
+}

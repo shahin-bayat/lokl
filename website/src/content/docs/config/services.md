@@ -29,6 +29,7 @@ services:
 | `depends_on` | list | Services to start first |
 | `autostart` | bool | Start automatically (default: true) |
 | `restart` | string | Restart policy: `no`, `always`, `on-failure` |
+| `proxy_only` | bool | Register the subdomain route without starting a process or container. Requires `port` and `subdomain`. See [Proxy-only services](#proxy-only-services). |
 
 ## Container-based Services
 
@@ -64,6 +65,7 @@ services:
 | `health` | object | Health check configuration (see below) |
 | `autostart` | bool | Start automatically (default: true) |
 | `restart` | string | Restart policy: `no`, `always`, `on-failure` |
+| `proxy_only` | bool | Register the subdomain route without starting a process or container. Requires `port` and `subdomain`. See [Proxy-only services](#proxy-only-services). |
 
 :::note
 - When `port` is set with `ports`, the port value must appear as a host port in one of the mappings.
@@ -217,3 +219,46 @@ services:
 ```
 
 Variables are resolved against the host's environment at config load time. Missing variables expand to an empty string.
+
+## Proxy-only services
+
+A service entry with `proxy_only: true` registers a subdomain route without starting a process or container. Useful for:
+
+- **One container, multiple HTTPS endpoints** — MinIO API + console, Postgres + pgAdmin, Jaeger UI on a second port.
+- **Host-native processes** — a Go server or Python script you run manually; lokl gives it a trusted HTTPS URL without managing its lifecycle.
+
+```yaml
+services:
+  minio:
+    image: minio/minio:latest
+    ports: ["9000:9000", "9001:9001"]
+    port: 9000
+    subdomain: s3
+
+  minio-console:
+    proxy_only: true
+    subdomain: console
+    port: 9001
+    depends_on: [minio]
+```
+
+### Required fields
+
+- `port` — the target port lokl forwards to (always `127.0.0.1:<port>` over HTTP).
+- `subdomain` — scalar or list; wildcards like `"*.x.test"` work the same as for regular services.
+
+### Allowed optional fields
+
+- `depends_on` — wait for another service to be healthy before probing.
+- `rewrite.strip_prefix` / `rewrite.fallback` — path aliasing, same as normal services.
+- `health.path` — HTTP readiness probe instead of the default TCP probe.
+
+### Disallowed fields
+
+`command`, `image`, `ports`, `volumes`, `env`, `env_file`, `autostart`, `restart`, `ready_timeout`, `limits`, `health.command`. Validation rejects these with a clear error message.
+
+### Notes
+
+- The target port can belong to a lokl-managed container (via its `ports:` publish) or to a host-native process the user runs themselves — lokl just dials `127.0.0.1:<port>`.
+- The duplicate-port validator ignores proxy-only services — they forward, not bind.
+- In the TUI, proxy-only services appear in the service list with a TCP-probe-backed status dot. The restart key is a no-op (no process to restart). The log panel shows a static banner.

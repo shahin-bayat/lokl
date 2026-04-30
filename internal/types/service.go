@@ -9,4 +9,5 @@ type ServiceInfo struct {
 	Running      bool
 	Healthy      bool
 	ProxyEnabled bool
+	ProxyOnly    bool
 }

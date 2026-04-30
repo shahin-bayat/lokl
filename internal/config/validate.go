@@ -55,6 +55,9 @@ func checkDuplicatePorts(services map[string]Service) error {
 	}
 
 	for name, svc := range services {
+		if svc.ProxyOnly {
+			continue // forwards to a port rather than claiming it
+		}
 		if err := register(name, svc.Port); err != nil {
 			return err
 		}
@@ -72,6 +75,10 @@ func checkDuplicatePorts(services map[string]Service) error {
 }
 
 func validateService(name string, svc *Service, services map[string]Service) error {
+	if svc.ProxyOnly {
+		return validateProxyOnlyService(name, svc, services)
+	}
+
 	hasCommand := svc.Command.IsSet()
 	hasImage := svc.Image != ""
 
@@ -91,22 +98,8 @@ func validateService(name string, svc *Service, services map[string]Service) err
 		return fmt.Errorf("service %q: port is required when subdomain is set", name)
 	}
 
-	seen := map[string]struct{}{}
-	for _, sd := range svc.Subdomains {
-		if _, dup := seen[sd]; dup {
-			return fmt.Errorf("service %q: duplicate subdomain %q", name, sd)
-		}
-		seen[sd] = struct{}{}
-
-		if after, isWild := strings.CutPrefix(sd, "*."); isWild {
-			if err := validateWildcardParent(after); err != nil {
-				return fmt.Errorf("service %q: subdomain %q: %w", name, sd, err)
-			}
-			continue
-		}
-		if strings.Contains(sd, "*") {
-			return fmt.Errorf("service %q: invalid subdomain %q", name, sd)
-		}
+	if err := validateSubdomainsOnService(name, svc.Subdomains); err != nil {
+		return err
 	}
 
 	if svc.Health != nil && svc.Health.Path != "" && svc.Port == 0 {
@@ -255,6 +248,91 @@ func checkDuplicateSubdomains(cfg *Config) error {
 var reservedWildcardParents = map[string]struct{}{
 	"com": {}, "org": {}, "net": {},
 	"local": {}, "localhost": {}, "test": {},
+}
+
+func validateProxyOnlyService(name string, svc *Service, services map[string]Service) error {
+	if svc.Command.IsSet() || svc.Image != "" {
+		return fmt.Errorf("service %q: proxy_only cannot be combined with command or image", name)
+	}
+	if len(svc.Ports) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare ports", name)
+	}
+	if len(svc.Volumes) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare volumes", name)
+	}
+	if len(svc.Env) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare env", name)
+	}
+	if len(svc.EnvFile) > 0 {
+		return fmt.Errorf("service %q: proxy_only cannot declare env_file", name)
+	}
+	if svc.AutoStart != nil {
+		return fmt.Errorf("service %q: autostart is not supported for proxy_only", name)
+	}
+	if svc.Restart != "" {
+		return fmt.Errorf("service %q: restart is not supported for proxy_only", name)
+	}
+	if svc.ReadyTimeout != "" {
+		return fmt.Errorf("service %q: ready_timeout is not supported for proxy_only", name)
+	}
+	if svc.Limits != nil {
+		return fmt.Errorf("service %q: limits is not supported for proxy_only", name)
+	}
+	if svc.Port == 0 {
+		return fmt.Errorf("service %q: proxy_only requires port", name)
+	}
+	if len(svc.Subdomains) == 0 {
+		return fmt.Errorf("service %q: proxy_only requires subdomain", name)
+	}
+	if svc.Health != nil && svc.Health.Command.IsSet() {
+		return fmt.Errorf("service %q: health.command is not supported for proxy_only", name)
+	}
+	if svc.Health != nil {
+		if svc.Health.Interval != "" {
+			if _, err := time.ParseDuration(svc.Health.Interval); err != nil {
+				return fmt.Errorf("service %q: invalid health.interval %q: %w", name, svc.Health.Interval, err)
+			}
+		}
+		if svc.Health.Timeout != "" {
+			if _, err := time.ParseDuration(svc.Health.Timeout); err != nil {
+				return fmt.Errorf("service %q: invalid health.timeout %q: %w", name, svc.Health.Timeout, err)
+			}
+		}
+		if svc.Health.Retries != nil && *svc.Health.Retries < 0 {
+			return fmt.Errorf("service %q: health.retries must be non-negative", name)
+		}
+	}
+
+	for _, dep := range svc.DependsOn {
+		if _, exists := services[dep]; !exists {
+			return fmt.Errorf("service %q: depends_on references unknown service %q", name, dep)
+		}
+	}
+
+	return validateSubdomainsOnService(name, svc.Subdomains)
+}
+
+// validateSubdomainsOnService runs per-service subdomain checks (shape,
+// reserved parents, duplicates) that apply equally to normal and proxy_only
+// services.
+func validateSubdomainsOnService(name string, subdomains []string) error {
+	seen := map[string]struct{}{}
+	for _, sd := range subdomains {
+		if _, dup := seen[sd]; dup {
+			return fmt.Errorf("service %q: duplicate subdomain %q", name, sd)
+		}
+		seen[sd] = struct{}{}
+		if after, isWild := strings.CutPrefix(sd, "*."); isWild {
+			if err := validateWildcardParent(after); err != nil {
+				return fmt.Errorf("service %q: subdomain %q: %w", name, sd, err)
+			}
+			continue
+		}
+		if strings.Contains(sd, "*") {
+			return fmt.Errorf("service %q: invalid subdomain %q", name, sd)
+		}
+	}
+	return nil
 }
 
 func validateWildcardParent(parent string) error {

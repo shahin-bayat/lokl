@@ -128,6 +128,27 @@ services:
 
 macOS only for now; Linux support (systemd-resolved) is coming in a follow-up release.
 
+### Proxy-only services (one container, multiple HTTPS endpoints)
+
+Some containers expose two HTTP servers on different ports — MinIO's S3 API on 9000 and its console on 9001, Postgres + a pgAdmin sidecar, Jaeger UI on its own port. Declare a second service entry with `proxy_only: true` to route another subdomain to the second port without starting a second container:
+
+```yaml
+services:
+  minio:
+    image: minio/minio:latest
+    ports: ["9000:9000", "9001:9001"]
+    port: 9000
+    subdomain: s3
+
+  minio-console:
+    proxy_only: true
+    subdomain: console         # → https://console.<domain> → 127.0.0.1:9001
+    port: 9001
+    depends_on: [minio]
+```
+
+A `proxy_only` service doesn't start a process or container — it only forwards. Same pattern works for host-native processes (e.g. a Go server you run manually with `go run`) that you want reachable via HTTPS.
+
 Containers in the same lokl project share a bridge network (`lokl-{name}`).
 They can reach each other by service name — no need to expose ports between containers:
 

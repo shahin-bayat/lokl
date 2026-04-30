@@ -57,3 +57,345 @@ func TestValidateWildcardSubdomains(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateProxyOnly(t *testing.T) {
+	base := func() *Config {
+		return &Config{
+			Name:  "demo",
+			Proxy: ProxyConfig{Domain: "test"},
+			Services: map[string]Service{
+				"real": {Command: StringOrSlice{Args: []string{"sh"}, Shell: true}, Port: 8000, Subdomains: Subdomains{"api"}},
+			},
+		}
+	}
+
+	t.Run("accept minimal", func(t *testing.T) {
+		cfg := base()
+		cfg.Services["console"] = Service{ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"console"}}
+		if err := validate(cfg); err != nil {
+			t.Fatalf("want accept, got %v", err)
+		}
+	})
+
+	t.Run("reject command", func(t *testing.T) {
+		cfg := base()
+		cfg.Services["bad"] = Service{ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"x"}, Command: StringOrSlice{Args: []string{"sh"}, Shell: true}}
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on command+proxy_only")
+		}
+	})
+
+	t.Run("reject image", func(t *testing.T) {
+		cfg := base()
+		cfg.Services["bad"] = Service{ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"x"}, Image: "foo"}
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on image+proxy_only")
+		}
+	})
+
+	t.Run("reject missing port", func(t *testing.T) {
+		cfg := base()
+		cfg.Services["bad"] = Service{ProxyOnly: true, Subdomains: Subdomains{"x"}}
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on missing port")
+		}
+	})
+
+	t.Run("reject missing subdomain", func(t *testing.T) {
+		cfg := base()
+		cfg.Services["bad"] = Service{ProxyOnly: true, Port: 9001}
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on missing subdomain")
+		}
+	})
+
+	t.Run("reject health command", func(t *testing.T) {
+		cfg := base()
+		cfg.Services["bad"] = Service{
+			ProxyOnly:  true,
+			Port:       9001,
+			Subdomains: Subdomains{"x"},
+			Health:     &HealthConfig{Command: StringOrSlice{Args: []string{"true"}, Shell: true}},
+		}
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on health.command+proxy_only")
+		}
+	})
+
+	t.Run("reject volumes", func(t *testing.T) {
+		cfg := base()
+		cfg.Services["bad"] = Service{ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"x"}, Volumes: []string{"./a:/b"}}
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on volumes+proxy_only")
+		}
+	})
+
+	t.Run("accept wildcard subdomain", func(t *testing.T) {
+		cfg := base()
+		cfg.Services["tenant"] = Service{ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"*.x.test"}}
+		if err := validate(cfg); err != nil {
+			t.Fatalf("wildcard subdomain should be accepted: %v", err)
+		}
+	})
+}
+
+func TestProxyOnlyDoesNotTripDuplicatePorts(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Services: map[string]Service{
+			"minio": {
+				Image:      "minio/minio",
+				Port:       9000,
+				Ports:      []string{"9000:9000", "9001:9001"},
+				Subdomains: Subdomains{"s3"},
+			},
+			"console": {
+				ProxyOnly:  true,
+				Port:       9001,
+				Subdomains: Subdomains{"console"},
+			},
+		},
+	}
+	if err := validate(cfg); err != nil {
+		t.Fatalf("proxy-only should not collide with published port: %v", err)
+	}
+}
+
+func TestValidateProxyOnlyRejectsEveryForbiddenField(t *testing.T) {
+	base := func() Service {
+		return Service{ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"console"}}
+	}
+	t.Run("reject ports", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Ports = []string{"9001:9001"}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on ports")
+		}
+	})
+	t.Run("reject env", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Env = map[string]string{"FOO": "bar"}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on env")
+		}
+	})
+	t.Run("reject env_file", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.EnvFile = []string{".env"}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on env_file")
+		}
+	})
+	t.Run("reject autostart", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		trueVal := true
+		svc.AutoStart = &trueVal
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on autostart")
+		}
+	})
+	t.Run("reject restart", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Restart = "always"
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on restart")
+		}
+	})
+	t.Run("reject ready_timeout", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.ReadyTimeout = "5s"
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on ready_timeout")
+		}
+	})
+	t.Run("reject limits", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Limits = &LimitsConfig{}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on limits")
+		}
+	})
+	t.Run("reject bare asterisk subdomain", func(t *testing.T) {
+		cfg := &Config{Name: "demo", Proxy: ProxyConfig{Domain: "test"}, Services: map[string]Service{"bad": {}}}
+		svc := base()
+		svc.Subdomains = Subdomains{"*"}
+		cfg.Services["bad"] = svc
+		if err := validate(cfg); err == nil {
+			t.Fatal("expected rejection on bare asterisk subdomain")
+		}
+	})
+}
+
+func TestProxyOnlyAppliesHealthDefaults(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Services: map[string]Service{
+			"shim": {
+				ProxyOnly:  true,
+				Port:       9001,
+				Subdomains: Subdomains{"shim"},
+				Health:     &HealthConfig{Path: "/healthz"},
+			},
+		},
+	}
+	applyDefaults(cfg)
+	h := cfg.Services["shim"].Health
+	if h == nil {
+		t.Fatal("Health should remain non-nil")
+	}
+	if h.Interval == "" || h.Timeout == "" || h.Retries == nil {
+		t.Fatalf("health defaults missing: %+v", h)
+	}
+}
+
+func TestProxyOnlyDoesNotInheritDefaults(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Env:   map[string]string{"GLOBAL": "1"},
+		Services: map[string]Service{
+			"real": {Command: StringOrSlice{Args: []string{"sh"}, Shell: true}, Port: 8000, Subdomains: Subdomains{"api"}},
+			"shim": {ProxyOnly: true, Port: 9001, Subdomains: Subdomains{"shim"}},
+		},
+	}
+
+	applyDefaults(cfg)
+
+	shim := cfg.Services["shim"]
+	if shim.AutoStart != nil {
+		t.Errorf("proxy-only AutoStart should remain nil, got %v", *shim.AutoStart)
+	}
+	if shim.Restart != "" {
+		t.Errorf("proxy-only Restart should remain empty, got %q", shim.Restart)
+	}
+	if len(shim.Env) != 0 {
+		t.Errorf("proxy-only Env should not inherit cfg.Env, got %v", shim.Env)
+	}
+
+	real := cfg.Services["real"]
+	if real.AutoStart == nil || !*real.AutoStart {
+		t.Errorf("normal service should default AutoStart=true, got %v", real.AutoStart)
+	}
+	if real.Restart != "on-failure" {
+		t.Errorf("normal service should default Restart=on-failure, got %q", real.Restart)
+	}
+	if real.Env["GLOBAL"] != "1" {
+		t.Errorf("normal service should inherit cfg.Env, got %v", real.Env)
+	}
+
+	if err := validate(cfg); err != nil {
+		t.Fatalf("validate after defaults: %v", err)
+	}
+}
+
+func TestValidateProxyOnlyRejectsUnknownDependsOn(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Services: map[string]Service{
+			"console": {
+				ProxyOnly:  true,
+				Port:       9001,
+				Subdomains: Subdomains{"console"},
+				DependsOn:  []string{"ghost"},
+			},
+		},
+	}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected rejection on unknown depends_on for proxy_only")
+	}
+}
+
+func TestValidateProxyOnlyAcceptsKnownDependsOn(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Services: map[string]Service{
+			"real": {
+				Command:    StringOrSlice{Args: []string{"sh"}, Shell: true},
+				Port:       8000,
+				Subdomains: Subdomains{"real"},
+			},
+			"console": {
+				ProxyOnly:  true,
+				Port:       9001,
+				Subdomains: Subdomains{"console"},
+				DependsOn:  []string{"real"},
+			},
+		},
+	}
+	if err := validate(cfg); err != nil {
+		t.Fatalf("expected acceptance, got %v", err)
+	}
+}
+
+func TestValidateProxyOnlyRejectsBadHealthInterval(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Services: map[string]Service{
+			"console": {
+				ProxyOnly:  true,
+				Port:       9001,
+				Subdomains: Subdomains{"console"},
+				Health:     &HealthConfig{Path: "/h", Interval: "1 sec"},
+			},
+		},
+	}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected rejection on malformed health.interval")
+	}
+}
+
+func TestValidateProxyOnlyRejectsBadHealthTimeout(t *testing.T) {
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Services: map[string]Service{
+			"console": {
+				ProxyOnly:  true,
+				Port:       9001,
+				Subdomains: Subdomains{"console"},
+				Health:     &HealthConfig{Path: "/h", Timeout: "500"},
+			},
+		},
+	}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected rejection on malformed health.timeout")
+	}
+}
+
+func TestValidateProxyOnlyAcceptsValidHealthTimings(t *testing.T) {
+	retries := 5
+	cfg := &Config{
+		Name:  "demo",
+		Proxy: ProxyConfig{Domain: "test"},
+		Services: map[string]Service{
+			"console": {
+				ProxyOnly:  true,
+				Port:       9001,
+				Subdomains: Subdomains{"console"},
+				Health:     &HealthConfig{Path: "/h", Interval: "5s", Timeout: "2s", Retries: &retries},
+			},
+		},
+	}
+	if err := validate(cfg); err != nil {
+		t.Fatalf("expected acceptance, got %v", err)
+	}
+}
