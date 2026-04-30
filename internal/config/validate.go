@@ -76,7 +76,7 @@ func checkDuplicatePorts(services map[string]Service) error {
 
 func validateService(name string, svc *Service, services map[string]Service) error {
 	if svc.ProxyOnly {
-		return validateProxyOnlyService(name, svc)
+		return validateProxyOnlyService(name, svc, services)
 	}
 
 	hasCommand := svc.Command.IsSet()
@@ -250,7 +250,7 @@ var reservedWildcardParents = map[string]struct{}{
 	"local": {}, "localhost": {}, "test": {},
 }
 
-func validateProxyOnlyService(name string, svc *Service) error {
+func validateProxyOnlyService(name string, svc *Service, services map[string]Service) error {
 	if svc.Command.IsSet() || svc.Image != "" {
 		return fmt.Errorf("service %q: proxy_only cannot be combined with command or image", name)
 	}
@@ -286,6 +286,27 @@ func validateProxyOnlyService(name string, svc *Service) error {
 	}
 	if svc.Health != nil && svc.Health.Command.IsSet() {
 		return fmt.Errorf("service %q: health.command is not supported for proxy_only", name)
+	}
+	if svc.Health != nil {
+		if svc.Health.Interval != "" {
+			if _, err := time.ParseDuration(svc.Health.Interval); err != nil {
+				return fmt.Errorf("service %q: invalid health.interval %q: %w", name, svc.Health.Interval, err)
+			}
+		}
+		if svc.Health.Timeout != "" {
+			if _, err := time.ParseDuration(svc.Health.Timeout); err != nil {
+				return fmt.Errorf("service %q: invalid health.timeout %q: %w", name, svc.Health.Timeout, err)
+			}
+		}
+		if svc.Health.Retries != nil && *svc.Health.Retries < 0 {
+			return fmt.Errorf("service %q: health.retries must be non-negative", name)
+		}
+	}
+
+	for _, dep := range svc.DependsOn {
+		if _, exists := services[dep]; !exists {
+			return fmt.Errorf("service %q: depends_on references unknown service %q", name, dep)
+		}
 	}
 
 	return validateSubdomainsOnService(name, svc.Subdomains)

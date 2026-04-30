@@ -107,16 +107,24 @@ func (r *Runner) probeTimings() (interval, timeout time.Duration, retries int) {
 		return
 	}
 	if r.svc.Health.Interval != "" {
-		if d, err := time.ParseDuration(r.svc.Health.Interval); err == nil {
+		d, err := time.ParseDuration(r.svc.Health.Interval)
+		if err != nil {
+			panic(fmt.Sprintf("proxy-only runner %q: invalid health.interval %q: %v", r.name, r.svc.Health.Interval, err))
+		}
+		if d > 0 {
 			interval = d
 		}
 	}
 	if r.svc.Health.Timeout != "" {
-		if d, err := time.ParseDuration(r.svc.Health.Timeout); err == nil {
+		d, err := time.ParseDuration(r.svc.Health.Timeout)
+		if err != nil {
+			panic(fmt.Sprintf("proxy-only runner %q: invalid health.timeout %q: %v", r.name, r.svc.Health.Timeout, err))
+		}
+		if d > 0 {
 			timeout = d
 		}
 	}
-	if r.svc.Health.Retries != nil {
+	if r.svc.Health.Retries != nil && *r.svc.Health.Retries > 0 {
 		retries = *r.svc.Health.Retries
 	}
 	return
