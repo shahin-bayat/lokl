@@ -98,6 +98,7 @@ func (d *dnsManager) add(domains []string) error {
 	block.WriteString(d.startMarker() + "\n")
 	for _, domain := range domains {
 		fmt.Fprintf(&block, "127.0.0.1 %s\n", domain)
+		fmt.Fprintf(&block, "::1 %s\n", domain)
 	}
 	block.WriteString(d.endMarker() + "\n")
 
@@ -241,6 +242,7 @@ func (d *dnsManager) block(domains []string) string {
 	b.WriteString(d.startMarker() + "\n")
 	for _, domain := range domains {
 		fmt.Fprintf(&b, "127.0.0.1 %s\n", domain)
+		fmt.Fprintf(&b, "::1 %s\n", domain)
 	}
 	b.WriteString(d.endMarker())
 	return b.String()

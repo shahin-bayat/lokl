@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -258,7 +259,9 @@ func TestHostsManagerBlock(t *testing.T) {
 
 	want := `# lokl:myproject - START
 127.0.0.1 app.example.com
+::1 app.example.com
 127.0.0.1 api.example.com
+::1 api.example.com
 # lokl:myproject - END`
 
 	if got != want {
@@ -274,6 +277,40 @@ func TestHostsManagerBlockEmpty(t *testing.T) {
 
 	if got != want {
 		t.Errorf("block(nil):\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestAddEmitsBothAddressFamilies(t *testing.T) {
+	tmp := t.TempDir()
+	hostsPath := filepath.Join(tmp, "hosts")
+	if err := os.WriteFile(hostsPath, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := &dnsManager{project: "demo", hostsPath: hostsPath}
+	if err := d.add([]string{"a.test", "b.test"}); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := os.ReadFile(hostsPath)
+	s := string(content)
+
+	for _, host := range []string{"a.test", "b.test"} {
+		if !strings.Contains(s, "127.0.0.1 "+host) {
+			t.Errorf("missing IPv4 entry for %s in:\n%s", host, s)
+		}
+		if !strings.Contains(s, "::1 "+host) {
+			t.Errorf("missing IPv6 entry for %s in:\n%s", host, s)
+		}
+	}
+}
+
+func TestBlockIncludesBothAddressFamilies(t *testing.T) {
+	d := &dnsManager{project: "demo"}
+	out := d.block([]string{"a.test"})
+	if !strings.Contains(out, "127.0.0.1 a.test") {
+		t.Errorf("block missing IPv4 line:\n%s", out)
+	}
+	if !strings.Contains(out, "::1 a.test") {
+		t.Errorf("block missing IPv6 line:\n%s", out)
 	}
 }
 
