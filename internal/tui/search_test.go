@@ -200,7 +200,7 @@ func TestFilterLogsExcludesNonMatchingLines(t *testing.T) {
 }
 
 func TestFilterLogsMatchesSanitizedText(t *testing.T) {
-	// Line has ANSI codes that sanitizeLog strips; query matches the visible text.
+	// Line has ANSI codes that plainLog strips; query matches the visible text.
 	lines := []string{"\x1b[31mERROR\x1b[0m something failed"}
 	got := filterLogs(lines, "error")
 	if len(got) != 1 {

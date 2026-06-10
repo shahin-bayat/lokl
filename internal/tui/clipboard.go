@@ -9,7 +9,7 @@ import (
 func copyToClipboard(lines []string) error {
 	var b strings.Builder
 	for _, line := range lines {
-		b.WriteString(sanitizeLog(line))
+		b.WriteString(plainLog(line))
 		b.WriteString("\n")
 	}
 
