@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shahin-bayat/lokl/internal/types"
 )
@@ -216,20 +217,14 @@ func (m Model) renderLogs(available int) string {
 	b.WriteString(headerStr)
 	b.WriteString(searchBar)
 	for _, line := range filtered[start:end] {
-		runes := []rune(plainLog(line))
-		hStart := m.logHOffset
-		if hStart > len(runes) {
-			hStart = len(runes)
-		}
-		hEnd := hStart + logWidth
-		if hEnd > len(runes) {
-			hEnd = len(runes)
-		}
-		if hEnd < hStart {
-			hEnd = hStart
-		}
+		display := displayLog(line)
+		hStart := min(m.logHOffset, ansi.StringWidth(display))
+		visible := ansi.Cut(display, hStart, hStart+logWidth)
 		b.WriteString("  ")
-		b.WriteString(string(runes[hStart:hEnd]))
+		b.WriteString(visible)
+		if strings.Contains(visible, "\x1b") {
+			b.WriteString("\x1b[0m")
+		}
 		b.WriteString("\n")
 	}
 
