@@ -28,7 +28,7 @@ type Model struct {
 	selectedIdx int
 	showLogs    bool
 	logOffset   int // 0 = pinned to latest; >0 = scrolled up by N lines
-	logHOffset  int // horizontal scroll offset in runes
+	logHOffset  int // horizontal scroll offset in display cells
 	showHelp    bool
 	width       int
 	height      int
