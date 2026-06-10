@@ -63,9 +63,14 @@ func consumeEscape(s string) (n int, keep bool) {
 	}
 	switch s[1] {
 	case '[': // CSI: params/intermediates, then final byte 0x40-0x7e
+		sgr := true
 		for i := 2; i < len(s); i++ {
-			if c := s[i]; c >= 0x40 && c <= 0x7e {
-				return i + 1, c == 'm'
+			c := s[i]
+			if c >= 0x40 && c <= 0x7e {
+				return i + 1, sgr && c == 'm'
+			}
+			if c < 0x30 || c > 0x3b {
+				sgr = false // private/intermediate bytes: not plain SGR
 			}
 		}
 		return len(s), false
