@@ -200,7 +200,7 @@ func TestFilterLogsExcludesNonMatchingLines(t *testing.T) {
 }
 
 func TestFilterLogsMatchesSanitizedText(t *testing.T) {
-	// Line has ANSI codes that sanitizeLog strips; query matches the visible text.
+	// Line has ANSI codes that plainLog strips; query matches the visible text.
 	lines := []string{"\x1b[31mERROR\x1b[0m something failed"}
 	got := filterLogs(lines, "error")
 	if len(got) != 1 {
@@ -281,5 +281,95 @@ func TestStatusBarShowsSlashHintInLogView(t *testing.T) {
 	stripped := ansi.Strip(bar)
 	if !strings.Contains(stripped, "/ search") {
 		t.Errorf("status bar in log view should show '/ search' hint; got: %q", stripped)
+	}
+}
+
+func TestRenderLogsKeepsSGRColor(t *testing.T) {
+	svc := types.ServiceInfo{Name: "api", Running: true, Healthy: true, Port: 3000}
+	logs := []string{"\x1b[32mready\x1b[0m in 100ms"}
+	m := newLogTestModel([]types.ServiceInfo{svc}, logs)
+	m.selectedIdx = 0
+	m.showLogs = true
+
+	output := m.renderLogs(20)
+	if !strings.Contains(output, "\x1b[32m") {
+		t.Errorf("renderLogs should keep SGR color; got: %q", output)
+	}
+}
+
+func TestRenderLogsStripsDangerousEscapes(t *testing.T) {
+	svc := types.ServiceInfo{Name: "api", Running: true, Healthy: true, Port: 3000}
+	logs := []string{"\x1bcboom \x1b[2Jcleared"}
+	m := newLogTestModel([]types.ServiceInfo{svc}, logs)
+	m.selectedIdx = 0
+	m.showLogs = true
+
+	output := m.renderLogs(20)
+	if strings.Contains(output, "\x1bc") || strings.Contains(output, "\x1b[2J") {
+		t.Errorf("renderLogs must strip hard reset and screen clear; got: %q", output)
+	}
+	if !strings.Contains(output, "boom") || !strings.Contains(output, "cleared") {
+		t.Errorf("text around stripped escapes must survive; got: %q", output)
+	}
+}
+
+func TestRenderLogsAppendsResetAfterColoredLine(t *testing.T) {
+	svc := types.ServiceInfo{Name: "api", Running: true, Healthy: true, Port: 3000}
+	// Unterminated SGR — without a reset this would tint everything after.
+	logs := []string{"\x1b[31munterminated red"}
+	m := newLogTestModel([]types.ServiceInfo{svc}, logs)
+	m.selectedIdx = 0
+	m.showLogs = true
+
+	output := m.renderLogs(20)
+	idx := strings.Index(output, "unterminated red")
+	if idx == -1 {
+		t.Fatalf("log line missing from output: %q", output)
+	}
+	rest := output[idx:]
+	nl := strings.Index(rest, "\n")
+	if nl == -1 {
+		t.Fatalf("no newline after log line: %q", rest)
+	}
+	if !strings.Contains(rest[:nl], "\x1b[0m") {
+		t.Errorf("reset must appear after log content before newline; got: %q", rest[:nl])
+	}
+}
+
+func TestRenderLogsHScrollKeepsColorMidSpan(t *testing.T) {
+	svc := types.ServiceInfo{Name: "api", Running: true, Healthy: true, Port: 3000}
+	logs := []string{"\x1b[32mgreen text here\x1b[0m"}
+	m := newLogTestModel([]types.ServiceInfo{svc}, logs)
+	m.selectedIdx = 0
+	m.showLogs = true
+	m.logHOffset = 3
+
+	output := m.renderLogs(20)
+	// ansi.Cut carries SGR from the skipped prefix (x/ansi truncateLeft).
+	if !strings.Contains(output, "\x1b[32m") {
+		t.Errorf("h-scrolled cut should keep active SGR; got: %q", output)
+	}
+	stripped := ansi.Strip(output)
+	if !strings.Contains(stripped, "en text here") {
+		t.Errorf("h-scroll window wrong; got: %q", stripped)
+	}
+	if strings.Contains(stripped, "gre") {
+		t.Errorf("first 3 cells should be cut; got: %q", stripped)
+	}
+}
+
+func TestRenderLogsHScrollWindowIgnoresEscapeBytes(t *testing.T) {
+	svc := types.ServiceInfo{Name: "api", Running: true, Healthy: true, Port: 3000}
+	// Escape bytes are zero display width — window math must use cells, not runes.
+	logs := []string{"\x1b[32mabcdefghij\x1b[0m"}
+	m := newLogTestModel([]types.ServiceInfo{svc}, logs)
+	m.selectedIdx = 0
+	m.showLogs = true
+	m.logHOffset = 5
+
+	output := m.renderLogs(20)
+	stripped := ansi.Strip(output)
+	if !strings.Contains(stripped, "fghij") || strings.Contains(stripped, "abcde") {
+		t.Errorf("window should start at cell 5 of visible text; got: %q", stripped)
 	}
 }

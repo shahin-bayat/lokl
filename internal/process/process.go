@@ -271,10 +271,29 @@ func lookPathWithEnv(name string, env []string, cwd string) (string, error) {
 
 func (p *Process) buildEnv() []string {
 	env := os.Environ()
+	// FORCE_COLOR=1 makes tools keep color despite the non-TTY pipe.
+	// Skip entirely when NO_COLOR is set anywhere — tools disagree on
+	// which variable wins, so never present both. Appended before
+	// config env so an explicit service FORCE_COLOR overrides.
+	if !p.noColorSet(env) {
+		env = append(env, "FORCE_COLOR=1")
+	}
 	for k, v := range p.config.Env {
 		env = append(env, k+"="+v)
 	}
 	return env
+}
+
+func (p *Process) noColorSet(inherited []string) bool {
+	if _, ok := p.config.Env["NO_COLOR"]; ok {
+		return true
+	}
+	for _, kv := range inherited {
+		if strings.HasPrefix(kv, "NO_COLOR=") {
+			return true
+		}
+	}
+	return false
 }
 
 func checkPortFree(port int) error {

@@ -21,6 +21,16 @@ func execCmd(args ...string) config.StringOrSlice {
 	return config.StringOrSlice{Args: args, Shell: false}
 }
 
+// clearNoColor removes NO_COLOR from the test process env so FORCE_COLOR
+// injection assertions are deterministic regardless of the host shell.
+func clearNoColor(t *testing.T) {
+	t.Helper()
+	if orig, ok := os.LookupEnv("NO_COLOR"); ok {
+		_ = os.Unsetenv("NO_COLOR")
+		t.Cleanup(func() { _ = os.Setenv("NO_COLOR", orig) })
+	}
+}
+
 func TestNewProcess(t *testing.T) {
 	p := New("web", config.Service{Command: shCmd("npm start")}, func() {}, func() {})
 	if p.IsRunning() {
@@ -35,6 +45,7 @@ func TestNewProcess(t *testing.T) {
 }
 
 func TestBuildEnv(t *testing.T) {
+	clearNoColor(t)
 	p := New("web", config.Service{
 		Command: shCmd("npm start"),
 		Env:     map[string]string{"NODE_ENV": "production", "PORT": "3000"},
@@ -44,8 +55,8 @@ func TestBuildEnv(t *testing.T) {
 
 	// Should contain os.Environ() entries plus our custom ones
 	osEnvLen := len(os.Environ())
-	if len(env) != osEnvLen+2 {
-		t.Errorf("env len = %d, want %d (os=%d + 2)", len(env), osEnvLen+2, osEnvLen)
+	if len(env) != osEnvLen+3 {
+		t.Errorf("env len = %d, want %d (os=%d + FORCE_COLOR + 2 custom)", len(env), osEnvLen+3, osEnvLen)
 	}
 
 	found := map[string]bool{}
@@ -56,9 +67,64 @@ func TestBuildEnv(t *testing.T) {
 		if strings.HasPrefix(e, "PORT=") {
 			found["PORT"] = true
 		}
+		if e == "FORCE_COLOR=1" {
+			found["FORCE_COLOR"] = true
+		}
 	}
-	if !found["NODE_ENV"] || !found["PORT"] {
+	if !found["NODE_ENV"] || !found["PORT"] || !found["FORCE_COLOR"] {
 		t.Errorf("custom env vars not found: %v", found)
+	}
+}
+
+func TestBuildEnvSkipsForceColorWhenNoColorInherited(t *testing.T) {
+	clearNoColor(t)
+	t.Setenv("NO_COLOR", "1")
+	p := New("web", config.Service{Command: shCmd("npm start")}, func() {}, func() {})
+
+	for _, e := range p.buildEnv() {
+		if strings.HasPrefix(e, "FORCE_COLOR=") {
+			t.Errorf("FORCE_COLOR must not be injected when NO_COLOR is in inherited env")
+		}
+	}
+}
+
+func TestBuildEnvSkipsForceColorWhenNoColorInServiceEnv(t *testing.T) {
+	clearNoColor(t)
+	p := New("web", config.Service{
+		Command: shCmd("npm start"),
+		Env:     map[string]string{"NO_COLOR": "1"},
+	}, func() {}, func() {})
+
+	for _, e := range p.buildEnv() {
+		if strings.HasPrefix(e, "FORCE_COLOR=") {
+			t.Errorf("FORCE_COLOR must not be injected when NO_COLOR is in service env")
+		}
+	}
+}
+
+func TestBuildEnvServiceForceColorWins(t *testing.T) {
+	clearNoColor(t)
+	p := New("web", config.Service{
+		Command: shCmd("npm start"),
+		Env:     map[string]string{"FORCE_COLOR": "0"},
+	}, func() {}, func() {})
+
+	env := p.buildEnv()
+	injected, user := -1, -1
+	for i, e := range env {
+		if e == "FORCE_COLOR=1" {
+			injected = i
+		}
+		if e == "FORCE_COLOR=0" {
+			user = i
+		}
+	}
+	if injected == -1 || user == -1 {
+		t.Fatalf("expected both FORCE_COLOR entries; injected=%d user=%d", injected, user)
+	}
+	// exec gives the last duplicate precedence — user value must come later.
+	if user < injected {
+		t.Error("service env FORCE_COLOR must appear after injected FORCE_COLOR=1")
 	}
 }
 

@@ -4,27 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shahin-bayat/lokl/internal/types"
 )
-
-func sanitizeLog(s string) string {
-	s = ansi.Strip(s)
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r == '\t':
-			b.WriteString("    ")
-		case !unicode.IsControl(r):
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
 
 func filterLogs(logs []string, query string) []string {
 	if query == "" {
@@ -33,7 +18,7 @@ func filterLogs(logs []string, query string) []string {
 	q := strings.ToLower(query)
 	out := make([]string, 0, len(logs))
 	for _, line := range logs {
-		if strings.Contains(strings.ToLower(sanitizeLog(line)), q) {
+		if strings.Contains(strings.ToLower(plainLog(line)), q) {
 			out = append(out, line)
 		}
 	}
@@ -232,20 +217,14 @@ func (m Model) renderLogs(available int) string {
 	b.WriteString(headerStr)
 	b.WriteString(searchBar)
 	for _, line := range filtered[start:end] {
-		runes := []rune(sanitizeLog(line))
-		hStart := m.logHOffset
-		if hStart > len(runes) {
-			hStart = len(runes)
-		}
-		hEnd := hStart + logWidth
-		if hEnd > len(runes) {
-			hEnd = len(runes)
-		}
-		if hEnd < hStart {
-			hEnd = hStart
-		}
+		display := displayLog(line)
+		hStart := min(m.logHOffset, ansi.StringWidth(display))
+		visible := ansi.Cut(display, hStart, hStart+logWidth)
 		b.WriteString("  ")
-		b.WriteString(string(runes[hStart:hEnd]))
+		b.WriteString(visible)
+		if strings.Contains(visible, "\x1b") {
+			b.WriteString("\x1b[0m")
+		}
 		b.WriteString("\n")
 	}
 
