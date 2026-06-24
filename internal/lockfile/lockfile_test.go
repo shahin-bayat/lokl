@@ -2,6 +2,8 @@ package lockfile_test
 
 import (
 	"os"
+	"os/exec"
+	"syscall"
 	"testing"
 	"time"
 
@@ -102,6 +104,25 @@ func TestIsStale_MissingPID(t *testing.T) {
 	e := &lockfile.Entry{PID: 999999999}
 	if !lockfile.IsStale(e) {
 		t.Error("non-existent PID should be stale")
+	}
+}
+
+// KillOrphans must not return until the process group is actually gone,
+// otherwise the caller races the orphan's socket teardown when rebinding.
+func TestKillOrphansWaitsForExit(t *testing.T) {
+	cmd := exec.Command("sleep", "30")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	pgid := cmd.Process.Pid // Setpgid => pgid == pid
+	go func() { _, _ = cmd.Process.Wait() }()
+
+	lockfile.KillOrphans(&lockfile.Entry{Processes: map[string]int{"svc": pgid}})
+
+	// Immediately after KillOrphans returns, the group must be gone.
+	if err := syscall.Kill(-pgid, 0); err == nil {
+		t.Fatal("process group still alive after KillOrphans returned")
 	}
 }
 

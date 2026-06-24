@@ -14,7 +14,12 @@ import (
 	"github.com/shahin-bayat/lokl/internal/runner"
 )
 
-const killGracePeriod = 5 * time.Second
+const (
+	killGracePeriod = 5 * time.Second
+	// reapTimeout caps how long KillOrphans waits for SIGKILL'd process
+	// groups to vanish (and release their ports) before returning.
+	reapTimeout = 3 * time.Second
+)
 
 type Entry struct {
 	PID        int            `json:"pid"`
@@ -74,10 +79,35 @@ func IsStale(e *Entry) bool {
 	return errors.Is(err, syscall.ESRCH)
 }
 
-// KillOrphans SIGKILLs services from a stale lock (parent already dead).
+// KillOrphans SIGKILLs services from a stale lock (parent already dead) and
+// waits for them to exit, so the caller can rebind their ports without racing
+// the kernel's socket teardown.
 func KillOrphans(e *Entry) {
 	signalProcesses(e, syscall.SIGKILL)
+	waitProcessesGone(e, reapTimeout)
 	stopContainers(e)
+}
+
+// waitProcessesGone polls until every recorded process group is gone or the
+// timeout elapses. Kill(-pgid, 0) returns ESRCH once no member survives.
+func waitProcessesGone(e *Entry, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for {
+		alive := false
+		for _, pgid := range e.Processes {
+			if pgid <= 0 {
+				continue
+			}
+			if err := syscall.Kill(-pgid, 0); err == nil {
+				alive = true
+				break
+			}
+		}
+		if !alive || !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // Kill sends SIGTERM to the parent lokl process and all service PGIDs,
