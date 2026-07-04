@@ -2,15 +2,14 @@
 
 # lokl
 
-**One command to rule them all.**
-
-Define your entire local dev environment in a single file. Start everything with `lokl up`.
+**Define your entire local dev environment in a single file. Start everything with `lokl up`.**
 
 [![Build](https://github.com/shahin-bayat/lokl/actions/workflows/ci.yml/badge.svg)](https://github.com/shahin-bayat/lokl/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/shahin-bayat/lokl/branch/main/graph/badge.svg)](https://codecov.io/gh/shahin-bayat/lokl)
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/Docs-lokl-purple)](https://shahin-bayat.github.io/lokl/)
+
+[**Documentation**](https://shahin-bayat.github.io/lokl/)
 
 <img src="assets/demo.gif" alt="lokl demo" width="700">
 
@@ -27,6 +26,19 @@ lokl up
 ```
 
 That's it. Frontend, backend, databases, HTTPS routing — all running.
+
+## How it compares
+
+| | lokl | docker-compose | overmind / foreman | Tilt |
+|---|:---:|:---:|:---:|:---:|
+| HTTPS with local domains, auto-certs | ✅ | — | — | — |
+| Native processes (no container) | ✅ | — | ✅ | partial |
+| Containers | ✅ | ✅ | — | ✅ |
+| Health checks & dependency order | ✅ | ✅ | — | ✅ |
+| Interactive TUI | ✅ | — | — | web UI |
+| Works without Kubernetes | ✅ | ✅ | ✅ | — |
+
+lokl runs your native processes and containers side by side, behind one HTTPS reverse proxy with auto-generated certificates — all from one config file.
 
 ## Features
 
@@ -112,77 +124,28 @@ services:
       retries: 10
 ```
 
-### Wildcard subdomains (multi-tenant apps)
-
-```yaml
-services:
-  web:
-    command: php artisan serve
-    subdomain:
-      - sellify.shop
-      - "*.sellify.shop"
-    port: 8000
-```
-
-`sudo lokl dns setup` writes `/etc/hosts` **and** `/etc/resolver/sellify.shop`; `lokl up` then runs an in-process DNS listener so every subdomain resolves locally. Cert SANs cover both apex and wildcard.
-
-macOS only for now; Linux support (systemd-resolved) is coming in a follow-up release.
-
-### Proxy-only services (one container, multiple HTTPS endpoints)
-
-Some containers expose two HTTP servers on different ports — MinIO's S3 API on 9000 and its console on 9001, Postgres + a pgAdmin sidecar, Jaeger UI on its own port. Declare a second service entry with `proxy_only: true` to route another subdomain to the second port without starting a second container:
-
-```yaml
-services:
-  minio:
-    image: minio/minio:latest
-    ports: ["9000:9000", "9001:9001"]
-    port: 9000
-    subdomain: s3
-
-  minio-console:
-    proxy_only: true
-    subdomain: console         # → https://console.<domain> → 127.0.0.1:9001
-    port: 9001
-    depends_on: [minio]
-```
-
-A `proxy_only` service doesn't start a process or container — it only forwards. Same pattern works for host-native processes (e.g. a Go server you run manually with `go run`) that you want reachable via HTTPS.
-
-Containers in the same lokl project share a bridge network (`lokl-{name}`).
-They can reach each other by service name — no need to expose ports between containers:
-
-```yaml
-services:
-  api:
-    image: myapp:latest
-    env:
-      DB_HOST: db        # reaches the "db" container directly
-      REDIS_HOST: cache  # reaches the "cache" container directly
-  db:
-    image: postgres:16
-  cache:
-    image: redis:7
-```
-
-### Override a container's command
-
-```yaml
-services:
-  web:
-    image: node:20
-    command: "npm run dev"  # overrides image CMD, keeps ENTRYPOINT
-```
-
 Then:
 - `https://app.myproject.dev` → frontend (port 5173)
 - `https://api.myproject.dev` → api (port 3000)
+
+## Going further
+
+The [documentation](https://shahin-bayat.github.io/lokl/) covers the full config and CLI reference, including:
+
+- [Wildcard subdomains](https://shahin-bayat.github.io/lokl/config/proxy/#wildcard-subdomains) — `*.myshop.dev` for multi-tenant apps
+- [Proxy-only services](https://shahin-bayat.github.io/lokl/config/services/#proxy-only-services) — multiple HTTPS endpoints for one container
+- [Container networking](https://shahin-bayat.github.io/lokl/config/services/#container-networking) — containers reach each other by service name
+- [Overriding a container's command](https://shahin-bayat.github.io/lokl/config/services/#overriding-a-containers-command)
 
 ## Requirements
 
 - macOS or Linux
 - Go 1.25+ (for installation from source)
 - Docker (for container-based services)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
